@@ -1197,6 +1197,19 @@ home_social_sm<-lmer(wellbeing ~ 1 +
                      REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
 summary(home_social_sm)
 
+library(effectsize)
+ef10<-effect(term="MediaUse.scaled*home_socialNumeric.scaled", mod=home_social_sm, xlevels=list(MediaUse.scaled=c(-1, 1), home_socialNumeric.scaled=c(0, 1)))
+preddata_socialDuration<-as.data.frame(ef10)
+preddata_socialDuration$home_socialNumeric.scaled<-as.character(preddata_socialDuration$home_socialNumeric.scaled)
+ggplot(data=preddata_socialDuration, aes(x=MediaUse.scaled, y=fit, linetype=home_socialNumeric.scaled)) + 
+  geom_point() +
+  geom_line() +
+  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=.3) +
+  geom_errorbar(aes(x=MediaUse.scaled, ymin=lower, ymax=upper), width=.05) +
+  xlab("Social Media Use (vs. non-Use)") + scale_x_continuous(breaks=seq(-2,2,by=1)) +
+  ylab("Predicted Affective Wellbeing") + ylim(3.0,3.3) +
+  ggtitle("Moderating Role of Social Context") + labs(linetype="Social Context")
+
 mainEffect<-main_effect_updated %>%
   dplyr::select(id, wellbeing, demog_age.z, socialmedia.cz, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedWB.cz, overall_study_day, home_socialNumeric.scaled) %>%
   na.omit()
@@ -1228,7 +1241,7 @@ home_social_duration<-lmer(wellbeing ~ 1 +
 summary(home_social_duration)
 
 library(effects)
-ef9<-effect(term="socialmedia.cz*home_socialNumeric.scaled", mod=home_social_duration, xlevels=list(socialmedia.cz=c(-3, 3), home_socialNumeric.scaled=c(0, 1)))
+ef9<-effect(term="socialmedia.cz*home_socialNumeric.scaled", mod=home_social_duration, xlevels=list(socialmedia.cz=c(-1, 1), home_socialNumeric.scaled=c(0, 1)))
 
 preddatahome_work<-as.data.frame(ef9)
 preddatahome_work$home_socialNumeric.scaled<-as.character(preddatahome_work$home_socialNumeric.scaled)
@@ -1238,8 +1251,8 @@ ggplot(data=preddatahome_work, aes(x=socialmedia.cz, y=fit, linetype=home_social
   geom_ribbon(aes(ymin=lower, ymax=upper), alpha=.3) +
   geom_errorbar(aes(x=socialmedia.cz, ymin=lower, ymax=upper), width=.05) +
   xlab("Social Media Use") + scale_x_continuous(breaks=seq(-2,2,by=1)) +
-  ylab("Predicted Affective Wellbeing") + ylim(2.5,3.5) +
-  ggtitle("Moderating Role of home_socialNumeric.scaled") + labs(colour="home_socialNumeric.scaled")
+  ylab("Predicted Affective Wellbeing") + ylim(3.0,3.3) +
+  ggtitle("Moderating Role of Social Context") + labs(linetype="Social Context")
 ```
 
 ```{r}
@@ -1562,7 +1575,7 @@ dvLabels=c("Baseline Model",
            "Transit vs. Home",
            "Nature vs. Home")
 
-  tab_model(control_effect_duration, 
+tab_model(control_effect_duration, 
             home_work_duration, 
             home_social_duration, 
             home_transit_duration, 
@@ -1570,7 +1583,13 @@ dvLabels=c("Baseline Model",
             pred.labels = predLabels,
             dv.labels = dvLabels)
 
+### Social Context has a significant moderator effect
+### Work Context has a significant moderator effect
 
+
+```
+
+```{r}
 predLabels=c("Intercept",
              "Sex", 
              "Age",
@@ -1604,6 +1623,12 @@ tab_model(control_effect_use,
           home_nature_sm,
           pred.labels = predLabels,
           dv.labels = dvLabels)
+
+### Social Context has a significant moderator effect
+
+```
+
+```{r}
 
 predLabels=c("Intercept",
              "Sex", 
@@ -1666,6 +1691,8 @@ tab_model(control_ties_num_duration,
           dv.labels = dvLabels)
 ```
 
+
+
 ```{r}
 mainEffect<-main_effect_updated %>%
   dplyr::select(id, wellbeing, demog_age.z, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedWB.cz, overall_study_day, internetUse.scaled, MediaUse) %>%
@@ -1720,6 +1747,25 @@ covid_wellbeing<-lmer(wellbeing ~ 1 +
                           REML=TRUE, control=lmerControl(optimizer="Nelder_Mead"))
 
 summary(covid_wellbeing)
+
+mainEffect_mediaUse<-main_effect_updated %>%
+  dplyr::select(id, wellbeing, demog_age.z, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedWB.cz, overall_study_day,covid, excercise, internetUse,    MediaUse.scaled) %>%
+  na.omit() %>%
+  dplyr::filter(excercise!=1 | covid!=1 | internetUse!=1)
+
+mediause_wellbeing<-lmer(wellbeing ~ 1 +
+                            demog_sex_recoded+
+                            demog_age.z+
+                            overall_study_day+
+                            weekend+
+                            nAct.cz+
+                            surveys_per_id.z+
+                            lagDur.cz*laggedWB.cz+
+                            MediaUse.scaled+(1+MediaUse.scaled| id), na.action=na.exclude, data=mainEffect_mediaUse, 
+                          REML=TRUE, control=lmerControl(optimizer="Nelder_Mead"))
+
+summary(mediause_wellbeing)
+
 ```
 
 
@@ -1727,12 +1773,16 @@ summary(covid_wellbeing)
 coefs_wb<-tibble(coef(covid_wellbeing)$id)
 coefs_excercise<-tibble(coef(excercise_wellbeing)$id)
 coefs_internet<-tibble(coef(internet_wellbeing)$id)
-ranefs<-tibble(ranef(covid_wellbeing)$id)
+coefs_sm<-tibble(coef(mediause_wellbeing)$id)
 
-ggplot(data=coefs_wb, aes(x=covid.scaled, fill="orange")) +
-  geom_density(alpha=0.25) + 
-  geom_density(data=coefs_excercise,aes(x=excercise.scaled, fill="darkblue"),alpha=0.25)+
-  geom_density(data=coefs_internet,aes(x=internetUse.scaled, fill="green"), alpha=0.25)+
+ggplot() +
+  geom_density(data=coefs_wb, aes(x=covid.scaled, fill="orange", color="red"),alpha=0.85) + 
+  geom_density(data=coefs_excercise, aes(x=excercise.scaled, fill="blue", color="darkblue"),alpha=0.85)+
+  geom_density(data=coefs_internet, aes(x=internetUse.scaled, fill="green", color="darkgreen"), alpha=0.85)+
+  geom_density(data=coefs_sm, aes(x=MediaUse.scaled, fill="black", color="grey"), alpha=0.65)+
   xlim(-0.25, 0.25)+
-  labs(x = "Person-Specific MLM Coefficients", y="Count") + ggtitle("Person-Specific Effects of COVID Information Seeking on Affective Wellbeing") 
+  labs(x = "Person-Specific MLM Coefficients", y="Count") + ggtitle("Person-Specific Effects of COVID Information Seeking on Affective Wellbeing")+ 
+  scale_colour_manual(name = "Momentary Behaviors", values =c('red'='darkblue','darkgreen'='darkgreen', 'darkblue'= 'red', 'grey'='grey'), labels = c('COVID Information Seeking','Internet Use', "Excercise", "Social Media Use")) +
+  scale_fill_manual(name = "Momentary Behaviors", values =c('orange'='blue','green'='green', 'blue'= 'orange', 'black'='black'), labels = c('COVID Information Seeking','Internet Use', "Excercise", "Social Media Use"))
+```
 
