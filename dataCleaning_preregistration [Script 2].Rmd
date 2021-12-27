@@ -412,6 +412,27 @@ mainEffect<-main_effect_updated %>%
   dplyr::select(id, wellbeing, demog_age.z, MediaUse.scaled, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedWB.cz, overall_study_day) %>%
   na.omit()
 
+icc<-main_effect_updated %>%
+  dplyr::select(id, wellbeing, demog_age.z, socialmedia.cz, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedWB.cz, overall_study_day) %>%
+  na.omit()
+
+icc<-lme(fixed=wellbeing ~ 1, random= ~ 1|id, na.action=na.exclude,control = lmeControl(opt = "optim"), data=icc)
+
+VarCorr(icc)
+RandomEffects <- as.numeric(VarCorr(icc)[,1])
+RandomEffects
+ICC_between <- RandomEffects[1]/(RandomEffects[1]+RandomEffects[2]) 
+
+icc<-main_effect_updated %>%
+  dplyr::select(id, wellbeing, demog_age.z, socialmedia.cz, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedWB.cz, overall_study_day) %>%
+  na.omit()
+
+icc_sm<-lme(fixed=socialmedia.cz ~ 1, random= ~ 1|id, na.action=na.exclude,control = lmeControl(opt = "optim"), data=icc)
+VarCorr(icc_sm)
+RandomEffects <- as.numeric(VarCorr(icc_sm)[,1])
+RandomEffects
+ICC_between <- RandomEffects[1]/(RandomEffects[1]+RandomEffects[2]) 
+
 control_effect<- lmer(wellbeing ~ 1 +
                   demog_age.z+
                   demog_sex_recoded+ 
@@ -1202,7 +1223,7 @@ mainEffectPlot<-main_effect_updated %>%
   na.omit()
 
 
-home_social_sm<-lmer(wellbeing ~ 1 +
+home_social_sm_plot<-lmer(wellbeing ~ 1 +
                        demog_sex_recoded+ 
                        demog_age.z+
                        surveys_per_id.z+
@@ -1216,7 +1237,7 @@ home_social_sm<-lmer(wellbeing ~ 1 +
 summary(home_social_sm)
 
 library(sjPlot)
-save<-plot_model(home_social_sm,  colors="bw", type="pred", terms = c("MediaUse", "home_social"))
+save<-plot_model(home_social_sm_plot,  colors="bw", type="pred", terms = c("MediaUse", "home_social"))
 
 printInteraction<-save+
   labs(y="Wellbeing", x="Social Media Use (vs Non-Use)", title="Social Context Moderator", shape="Social Context")
@@ -1614,10 +1635,10 @@ predLabels=c("Intercept",
              "Social Media Use Duration x Nature Context")
 
 dvLabels=c("Baseline Model",
-           "Work vs. Home",
-           "Social vs. Home",
-           "Transit vs. Home",
-           "Nature vs. Home")
+           "Work Context",
+           "Social Context",
+           "Transit Context",
+           "Nature Context")
 
 tab_model(control_effect_duration, 
             home_work_duration, 
@@ -1655,10 +1676,10 @@ predLabels=c("Intercept",
              "Social Media Use (vs. Non-Use) x Nature Context")
 
 dvLabels=c("Baseline Model",
-           "Work vs. Home",
-           "Social vs. Home",
-           "Transit vs. Home",
-           "Nature vs. Home")
+           "Work Context",
+           "Social Context",
+           "Transit Context",
+           "Nature Context")
 
 tab_model(control_effect_use, 
           home_work_sm, 
@@ -1839,13 +1860,17 @@ count_min<-which(coefs_full_duration$socialmedia.cz<=-0.1)
 count_max<-which(coefs_full_duration$socialmedia.cz>=0.1)
 
 
+### Confidence interval for variance of random slopes for full model
+#save_confintDuration<-confint(main_effect_random_duration)
+
+
 ggplot() +
   geom_density(data=coefs_wb, aes(x=covid.scaled, fill="orange", color="red"),alpha=0.85) + 
   geom_density(data=coefs_excercise, aes(x=excercise.scaled, fill="blue", color="darkblue"),alpha=0.85)+
   geom_density(data=coefs_internet, aes(x=internetUse.scaled, fill="green", color="darkgreen"), alpha=0.85)+
   geom_density(data=coefs_sm, aes(x=MediaUse.scaled, fill="black", color="grey"), alpha=0.65)+
   xlim(-0.25, 0.25)+
-  labs(x = "Person-Specific MLM Coefficients", y="Count") + ggtitle("Person-Specific Effects of COVID Information Seeking on Affective Wellbeing")+ 
+  labs(x = "Person-Specific MLM Coefficients", y="Count") + ggtitle("Person-Specific Effects of Everyday Behaviors on Affective Wellbeing")+ 
   scale_colour_manual(name = "Momentary Behaviors", values =c('red'='darkblue','darkgreen'='darkgreen', 'darkblue'= 'red', 'grey'='grey'), labels = c('COVID Information Seeking','Internet Use', "Excercise", "Social Media Use")) +
   scale_fill_manual(name = "Momentary Behaviors", values =c('orange'='blue','green'='green', 'blue'= 'orange', 'black'='black'), labels = c('COVID Information Seeking','Internet Use', "Excercise", "Social Media Use"))
 ```
