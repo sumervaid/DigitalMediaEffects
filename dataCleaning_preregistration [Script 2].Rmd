@@ -1197,18 +1197,30 @@ home_social_sm<-lmer(wellbeing ~ 1 +
                      REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
 summary(home_social_sm)
 
-library(effectsize)
-ef10<-effect(term="MediaUse.scaled*home_socialNumeric.scaled", mod=home_social_sm, xlevels=list(MediaUse.scaled=c(-1, 1), home_socialNumeric.scaled=c(0, 1)))
-preddata_socialDuration<-as.data.frame(ef10)
-preddata_socialDuration$home_socialNumeric.scaled<-as.character(preddata_socialDuration$home_socialNumeric.scaled)
-ggplot(data=preddata_socialDuration, aes(x=MediaUse.scaled, y=fit, linetype=home_socialNumeric.scaled)) + 
-  geom_point() +
-  geom_line() +
-  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=.3) +
-  geom_errorbar(aes(x=MediaUse.scaled, ymin=lower, ymax=upper), width=.05) +
-  xlab("Social Media Use (vs. non-Use)") + scale_x_continuous(breaks=seq(-2,2,by=1)) +
-  ylab("Predicted Affective Wellbeing") + ylim(3.0,3.3) +
-  ggtitle("Moderating Role of Social Context") + labs(linetype="Social Context")
+mainEffectPlot<-main_effect_updated %>%
+  dplyr::select(id, wellbeing, demog_age.z, MediaUse, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedWB.cz, overall_study_day, home_social) %>%
+  na.omit()
+
+
+home_social_sm<-lmer(wellbeing ~ 1 +
+                       demog_sex_recoded+ 
+                       demog_age.z+
+                       surveys_per_id.z+
+                       overall_study_day+
+                       weekend+
+                       nAct.cz+
+                       lagDur.cz*laggedWB.cz+
+                       MediaUse*home_social+
+                       (1+MediaUse| id),  na.action = na.exclude, data=mainEffectPlot,
+                     REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(home_social_sm)
+
+library(sjPlot)
+save<-plot_model(home_social_sm,  colors="bw", type="pred", terms = c("MediaUse", "home_social"))
+
+printInteraction<-save+
+  labs(y="Wellbeing", x="Social Media Use (vs Non-Use)", title="Social Context Moderator", shape="Social Context")
+
 
 mainEffect<-main_effect_updated %>%
   dplyr::select(id, wellbeing, demog_age.z, socialmedia.cz, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedWB.cz, overall_study_day, home_socialNumeric.scaled) %>%
@@ -1347,6 +1359,25 @@ home_work_sm<-lmer(wellbeing ~ 1 +
                    REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
 summary(home_work_sm)
 
+
+mainEffectPlot<-main_effect_updated %>%
+  dplyr::select(id, wellbeing, demog_age.z, MediaUse, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedWB.cz, overall_study_day, home_work) %>%
+  na.omit()
+
+home_work_sm_plot<-lmer(wellbeing ~ 1 +
+                       demog_sex_recoded+ 
+                       demog_age.z+
+                       surveys_per_id.z+
+                       overall_study_day+
+                       weekend+
+                       nAct.cz+
+                       lagDur.cz*laggedWB.cz+
+                       MediaUse*home_work+
+                       (1+MediaUse| id),  na.action = na.exclude, data=mainEffectPlot,
+                     REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(home_work_sm_plot)
+
+
 mainEffect<-main_effect_updated %>%
   dplyr::select(id, wellbeing, demog_age.z, socialmedia.cz, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedWB.cz, overall_study_day, home_workNumeric.scaled) %>%
   na.omit()
@@ -1363,6 +1394,19 @@ home_work_duration<-lmer(wellbeing ~ 1 +
                            (1+socialmedia.cz| id),  na.action = na.exclude, data=mainEffect,
                          REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
 summary(home_work_duration)
+
+ef9<-effect(term="socialmedia.cz*home_workNumeric.scaled", mod=home_work_duration, xlevels=list(socialmedia.cz=c(-1, 1), home_workNumeric.scaled=c(0, 1)))
+
+preddatahome_work<-as.data.frame(ef9)
+preddatahome_work$home_workNumeric.scaled<-as.character(preddatahome_work$home_workNumeric.scaled)
+ggplot(data=preddatahome_work, aes(x=socialmedia.cz, y=fit, linetype=home_workNumeric.scaled)) + 
+  geom_point() +
+  geom_line() +
+  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=.3) +
+  geom_errorbar(aes(x=socialmedia.cz, ymin=lower, ymax=upper), width=.05) +
+  xlab("Social Media Use") + scale_x_continuous(breaks=seq(-2,2,by=1)) +
+  ylab("Wellbeing") + ylim(3.0,3.3) +
+  ggtitle("Moderating Role of Work Context") + labs(linetype="Work Context")
 ```
 
 
@@ -1774,6 +1818,26 @@ coefs_wb<-tibble(coef(covid_wellbeing)$id)
 coefs_excercise<-tibble(coef(excercise_wellbeing)$id)
 coefs_internet<-tibble(coef(internet_wellbeing)$id)
 coefs_sm<-tibble(coef(mediause_wellbeing)$id)
+
+coefs_full_sm<-tibble(coef(main_effect_random_sm)$id) %>%
+  dplyr::select(MediaUse.scaled) 
+
+### 5 participants have a magnitude of less than 0.1
+count_min<-which(coefs_full_sm$MediaUse.scaled<=-0.1)
+
+### 0 participants have a magnitude greater than 0.1
+count_max<-which(coefs_full_sm$MediaUse.scaled>=0.1)
+
+
+coefs_full_duration<-tibble(coef(main_effect_random_duration)$id) %>%
+  dplyr::select(socialmedia.cz)
+
+### 0 participants have a magnitude of less than 0.1
+count_min<-which(coefs_full_duration$socialmedia.cz<=-0.1)
+
+### 0 participants have a magnitude greater than 0.1
+count_max<-which(coefs_full_duration$socialmedia.cz>=0.1)
+
 
 ggplot() +
   geom_density(data=coefs_wb, aes(x=covid.scaled, fill="orange", color="red"),alpha=0.85) + 
