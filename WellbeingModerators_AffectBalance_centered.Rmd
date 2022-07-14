@@ -11,8 +11,6 @@ library(sjPlot)
 library(interactions)
 library(jtools)
 main_effect_updated<-read_csv("modelling_data_exploratory.csv")
-
-setwd("~/Desktop/Patti-Valkenburg Rereproduction/Patti Valkenburg Working Paper Analyses Reproduction /Affect Balance Models - Preregistration")
 ```
 
 ```{r}
