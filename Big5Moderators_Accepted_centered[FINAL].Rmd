@@ -6,14 +6,13 @@ output: html_notebook
 
 
 ```{r}
-setwd("~/Desktop/OneDrive - Stanford/CoCo - Social Media Use and Psychological Wellbeing/IdiographicWellbeing/DigitalMediaEffects/Accepted Models - Preregistration")
 library(tidyverse)
 library(lme4)
 library(lmerTest)
 library(sjPlot)
 library(interactions)
 library(jtools)
-main_effect_updated<-read_csv("model_data_centered_new.csv")
+main_effect_updated<-read_csv("modelling_data_exploratory.csv")
 ```
 
 ```{r}
