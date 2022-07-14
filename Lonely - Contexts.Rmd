@@ -1,0 +1,583 @@
+---
+title: "Lonely - Exploratory Results"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r, data, echo=FALSE}
+library(tidyverse)
+library(sjPlot)
+library(brms)
+library(parallel)
+library(interactions)
+library(jtools)
+library(lme4)
+
+main_effect_updated<-read_csv(
+  "modelling_data_exploratory.csv"
+)
+ncores = detectCores()
+```
+
+
+```{r, home, echo=FALSE}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home.mean, 
+                home.scaled) %>% na.omit() %>% dplyr::distinct()
+
+homeContext_use<-brm(lonely_r ~
+                         ((MediaUse.scaled+
+                             MediaUse.mean)*
+                            (home.scaled+ 
+                               home.mean))+
+                         demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+
+                         (lagDur.cz*laggedLonely.cz)+
+                         (1+MediaUse.scaled*home.scaled| id),
+                       data=mainEffect,family=gaussian(),
+                       seed = 1234, cores=ncores, iter=12000)
+
+summary(homeContext_use)
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home.mean, 
+                home.scaled) %>% na.omit() %>% dplyr::distinct()
+
+homeContext_duration<-brm(lonely_r ~
+                              ((socialmedia.cz+socialmedia.bp.z)*
+                                 (home.scaled+ home.mean))+
+                              demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+ (lagDur.cz*laggedLonely.cz)+
+                              (1+socialmedia.cz*home.scaled| id),
+                            data=mainEffect,family=gaussian(),
+                            seed = 1234, cores=ncores, iter=12000)
+
+summary(homeContext_duration)
+```
+
+```{r, social, echo=FALSE}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_socialNumeric.mean, 
+                home_socialNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+socialContext_use<-brm(lonely_r ~
+                         ((MediaUse.scaled+
+                             MediaUse.mean)*
+                            (home_socialNumeric.scaled+ 
+                               home_socialNumeric.mean))+
+                         demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+
+                         (lagDur.cz*laggedLonely.cz)+
+                         (1+MediaUse.scaled*home_socialNumeric.scaled| id),
+                       data=mainEffect,family=gaussian(),
+                       seed = 1234, cores=ncores, iter=12000)
+
+summary(socialContext_use)
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_socialNumeric.mean, 
+                home_socialNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+socialContext_duration<-brm(lonely_r ~
+                              ((socialmedia.cz+socialmedia.bp.z)*
+                                 (home_socialNumeric.scaled+ home_socialNumeric.mean))+
+                              demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+ (lagDur.cz*laggedLonely.cz)+
+                              (1+socialmedia.cz*home_socialNumeric.scaled| id),
+                            data=mainEffect,family=gaussian(),
+                            seed = 1234, cores=ncores, iter=12000)
+
+summary(socialContext_duration)
+```
+
+```{r, nature, echo=FALSE}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_natureNumeric.mean, 
+                home_natureNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+
+natureContext_use<-brm(lonely_r ~
+                         ((MediaUse.scaled+MediaUse.mean)*
+                            (home_natureNumeric.scaled+ home_natureNumeric.mean))+
+                         demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                         (1+MediaUse.scaled*home_natureNumeric.scaled| id),
+                       data=mainEffect,family=gaussian(),
+                       seed = 1234, cores= 10, iter=12000)
+
+summary(natureContext_use)
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_natureNumeric.mean, 
+                home_natureNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+natureContext_duration<-brm(lonely_r ~
+                              ((socialmedia.cz+socialmedia.bp.z)*
+                                 (home_natureNumeric.scaled+ home_natureNumeric.mean))+
+                              demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                              (1+socialmedia.cz*home_natureNumeric.scaled| id),
+                            data=mainEffect,family=gaussian(),
+                            seed = 1234, cores=ncores, iter=12000)
+
+summary(natureContext_duration)
+```
+
+```{r, transit, echo=FALSE}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_transitNumeric.mean, 
+                home_transitNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+
+transitContext_use<-brm(lonely_r ~
+                          ((MediaUse.scaled+MediaUse.mean)*
+                             (home_transitNumeric.scaled+ home_transitNumeric.mean))+
+                          demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+ (lagDur.cz*laggedLonely.cz)+
+                          (1+MediaUse.scaled*home_transitNumeric.scaled| id),
+                        data=mainEffect,family=gaussian(),
+                        seed = 1234, cores=ncores, iter=12000)
+
+summary(transitContext_use)
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_transitNumeric.mean, 
+                home_transitNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+transitContext_duration<-brm(lonely_r ~
+                               ((socialmedia.cz+socialmedia.bp.z)*
+                                  (home_transitNumeric.scaled+ home_transitNumeric.mean))+
+                               demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+  (lagDur.cz*laggedLonely.cz)+
+                               (1+socialmedia.cz*home_transitNumeric.scaled| id),
+                             data=mainEffect,family=gaussian(),
+                             seed = 1234, cores=ncores, iter=12000)
+
+summary(transitContext_duration)
+```
+
+```{r, work, echo=FALSE}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_workNumeric.mean, 
+                home_workNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+
+workContext_use<-brm(lonely_r ~
+                       ((MediaUse.scaled+MediaUse.mean)*
+                          (home_workNumeric.scaled+ home_workNumeric.mean))+
+                       demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                       (1+MediaUse.scaled*home_workNumeric.scaled| id),
+                     data=mainEffect,family=gaussian(),
+                     seed = 1234, cores=ncores, iter=12000)
+
+summary(workContext_use)
+
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_workNumeric.mean, 
+                home_workNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+workContext_duration<-brm(lonely_r ~
+                            ((socialmedia.cz+socialmedia.bp.z)*
+                               (home_workNumeric.scaled+ home_workNumeric.mean))+
+                            demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                            (1+socialmedia.cz*home_workNumeric.scaled| id),
+                          data=mainEffect,family=gaussian(),
+                          seed = 1234, cores=ncores, iter=12000)
+
+summary(workContext_duration)
+```
+
+```{r, religion, echo=FALSE}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_religionNumeric.mean, 
+                home_religionNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+
+religionContext_use<-brm(lonely_r ~
+                         ((MediaUse.scaled+MediaUse.mean)*
+                            (home_religionNumeric.scaled+ home_religionNumeric.mean))+
+                         demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                         (1+MediaUse.scaled*home_religionNumeric.scaled| id),
+                       data=mainEffect,family=gaussian(),
+                       seed = 1234, cores= 10, iter=12000)
+
+summary(religionContext_use)
+
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_religionNumeric.mean, 
+                home_religionNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+religionContext_duration<-brm(lonely_r ~
+                              ((socialmedia.cz+socialmedia.bp.z)*
+                                 (home_religionNumeric.scaled+ home_religionNumeric.mean))+
+                              demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                              (1+socialmedia.cz*home_religionNumeric.scaled| id),
+                            data=mainEffect,family=gaussian(),
+                            seed = 1234, cores=ncores, iter=12000)
+
+summary(religionContext_duration)
+```
+
+```{r, study, echo=FALSE}
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_studyNumeric.mean, 
+                home_studyNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+
+studyContext_use<-brm(lonely_r ~
+                         ((MediaUse.scaled+MediaUse.mean)*
+                            (home_studyNumeric.scaled+ home_studyNumeric.mean))+
+                         demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                         (1+MediaUse.scaled*home_studyNumeric.scaled| id),
+                       data=mainEffect,family=gaussian(),
+                       seed = 1234, cores= 10, iter=12000)
+
+summary(studyContext_use)
+
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_studyNumeric.mean, 
+                home_studyNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+studyContext_duration<-brm(lonely_r ~
+                              ((socialmedia.cz+socialmedia.bp.z)*
+                                 (home_studyNumeric.scaled+ home_studyNumeric.mean))+
+                              demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                              (1+socialmedia.cz*home_studyNumeric.scaled| id),
+                            data=mainEffect,family=gaussian(),
+                            seed = 1234, cores=ncores, iter=12000)
+
+summary(studyContext_duration)
+```
+
+
+```{r, gym, echo=FALSE}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_gymNumeric.mean, 
+                home_gymNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+
+gymContext_use<-brm(lonely_r ~
+                         ((MediaUse.scaled+MediaUse.mean)*
+                            (home_gymNumeric.scaled+ home_gymNumeric.mean))+
+                         demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                         (1+MediaUse.scaled*home_gymNumeric.scaled| id),
+                       data=mainEffect,family=gaussian(),
+                       seed = 1234, cores= 10, iter=12000)
+
+summary(gymContext_use)
+
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                home_gymNumeric.mean, 
+                home_gymNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+gymContext_duration<-brm(lonely_r ~
+                              ((socialmedia.cz+socialmedia.bp.z)*
+                                 (home_gymNumeric.scaled+ home_gymNumeric.mean))+
+                              demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                              (1+socialmedia.cz*home_gymNumeric.scaled| id),
+                            data=mainEffect,family=gaussian(),
+                            seed = 1234, cores=ncores, iter=12000)
+
+summary(gymContext_duration)
+```
+
+```{r, alone, echo=FALSE}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                alone.mean, 
+                alone.scaled) %>% na.omit() %>% dplyr::distinct()
+
+aloneContext_use<-brm(lonely_r ~
+                         ((MediaUse.scaled+
+                             MediaUse.mean)*
+                            (alone.scaled+ 
+                               alone.mean))+
+                         demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+
+                         (lagDur.cz*laggedLonely.cz)+
+                         (1+MediaUse.scaled*alone.scaled| id),
+                       data=mainEffect,family=gaussian(),
+                       seed = 1234, cores=ncores, iter=12000)
+
+summary(aloneContext_use)
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                alone.mean, 
+                alone.scaled) %>% na.omit() %>% dplyr::distinct()
+
+aloneContext_duration<-brm(lonely_r ~
+                             ((socialmedia.cz+socialmedia.bp.z)*
+                                 (alone.scaled+ alone.mean))+
+                              demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+
+                             (lagDur.cz*laggedLonely.cz)+
+                              (1+socialmedia.cz*alone.scaled| id),
+                       data=mainEffect,family=gaussian(),
+                       seed = 1234, cores=ncores, iter=12000)
+
+summary(aloneContext_duration)
+```
+
+
+```{r, close-ties, echo=FALSE}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                closeTiesNumeric.mean, 
+                closeTiesNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+
+closeTiesSocialContext_use<-brm(lonely_r ~
+                                  ((MediaUse.scaled+MediaUse.mean)*
+                                     (closeTiesNumeric.scaled+ closeTiesNumeric.mean))+
+                                  demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+ (lagDur.cz*laggedLonely.cz)+
+                                  (1+MediaUse.scaled*closeTiesNumeric.scaled| id),
+                                data=mainEffect,family=gaussian(),
+                                seed = 1234, cores=ncores, iter=12000)
+
+summary(closeTiesSocialContext_use)
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                closeTiesNumeric.mean, 
+                closeTiesNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+closeTiesSocialContext_duration<-brm(lonely_r ~
+                                        ((socialmedia.cz+socialmedia.bp.z)*
+                                           (closeTiesNumeric.scaled+ closeTiesNumeric.mean))+
+                                        demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                                        (1+socialmedia.cz*closeTiesNumeric.scaled| id),
+                                      data=mainEffect,family=gaussian(),
+                                      seed = 1234, cores=ncores, iter=12000)
+
+summary(closeTiesSocialContext_duration)
+```
+
+```{r, distant-ties, echo=FALSE}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                distantTiesNumeric.mean, 
+                distantTiesNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+
+distantTiesSocialContext_use<-brm(lonely_r ~
+                                    ((MediaUse.scaled+MediaUse.mean)*
+                                       (distantTiesNumeric.scaled+ distantTiesNumeric.mean))+
+                                    demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                                    (1+MediaUse.scaled*distantTiesNumeric.scaled| id),
+                                  data=mainEffect,family=gaussian(),
+                                  seed = 1234, cores=ncores, iter=12000)
+
+summary(distantTiesSocialContext_use)
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                distantTiesNumeric.mean, 
+                distantTiesNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+### 3 divergent transitions, increase adapt_delata above 0.8
+distantTiesSocialContext_duration<-brm(lonely_r ~
+                                         ((socialmedia.cz+socialmedia.bp.z)*
+                                            (distantTiesNumeric.scaled+ distantTiesNumeric.mean))+
+                                         demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+ (lagDur.cz*laggedLonely.cz)+
+                                         (1+socialmedia.cz*distantTiesNumeric.scaled| id),
+                                       data=mainEffect,family=gaussian(),
+                                       seed = 1234, cores=ncores, iter=12000)
+
+summary(distantTiesSocialContext_duration)
+```
+
+```{r, family-ties, echo=FALSE}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                MediaUse.scaled, 
+                MediaUse.mean,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                familyTiesNumeric.mean, 
+                familyTiesNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+familyTiesSocialContext_use<-brm(lonely_r ~
+                                   ((MediaUse.scaled+MediaUse.mean)*
+                                      (familyTiesNumeric.scaled+ familyTiesNumeric.mean))+
+                                   demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                                   (1+MediaUse.scaled*familyTiesNumeric.scaled| id),
+                                 data=mainEffect,family=gaussian(),
+                                 seed = 1234, cores=ncores, iter=12000)
+
+summary(familyTiesSocialContext_use)
+
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, lonely_r, StartDateConvert, 
+                socialmedia.cz, 
+                socialmedia.bp.z,
+                demog_sex_recoded, demog_age.z, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, laggedLonely.cz, overall_study_day, 
+                familyTiesNumeric.mean, 
+                familyTiesNumeric.scaled) %>% na.omit() %>% dplyr::distinct()
+
+familyTiesSocialContext_duration<-brm(lonely_r ~
+                                        ((socialmedia.cz+socialmedia.bp.z)*
+                                           (familyTiesNumeric.scaled+ familyTiesNumeric.mean))+
+                                        demog_sex_recoded+demog_age.z+weekend+nAct.cz+surveys_per_id.z+overall_study_day+(lagDur.cz*laggedLonely.cz)+
+                                        (1+socialmedia.cz*familyTiesNumeric.scaled| id),
+                                      data=mainEffect,family=gaussian(),
+                                      seed = 1234, cores=ncores, iter=12000)
+
+summary(familyTiesSocialContext_duration)
+```
+
+```{r, sig-results, echo=FALSE}
+plot1=interactions::johnson_neyman(homeContext_use, modx="MediaUse.mean", pred="home.scaled")
+plot1=plot1$plot+xlab("Social Media Use (vs Non-Use) (BP)")+ylab("Slope of Home Location and Loneliness(R)")
+plot1
+plot2=interactions::interact_plot(homeContext_use, modx="MediaUse.mean", pred="home.scaled")
+plot2=plot2+theme_apa()+xlab("Home Location (vs Non-Home)") + ylab("Loneliness (R)") +ggtitle("Social Media Use (vs Non-Use) (BP)")
+plot2
+```
+
+```{r, sig-results-2, echo=FALSE}
+plot1=interactions::johnson_neyman(natureContext_use, modx="MediaUse.mean", pred="home_natureNumeric.scaled")
+plot1=plot1$plot+xlab("Social Media Use (vs Non-Use) (BP)")+ylab("Slope of Nature (WP) and Loneliness(R)")
+plot1
+plot2=interactions::interact_plot(natureContext_use, modx="MediaUse.mean", pred="home_natureNumeric.scaled")
+plot2=plot2+theme_apa()+xlab("Nature (WP)") + ylab("Loneliness (R)") +ggtitle("Social Media Use (vs Non-Use) (BP)")
+plot2
+```
+
+```{r sig-results-3, echo=FALSE}
+plot1=interactions::johnson_neyman(natureContext_duration, modx="home_natureNumeric.mean", pred="socialmedia.cz")
+plot1=plot1$plot+xlab("Nature (BP)")+ylab("Slope of Social Media and Loneliness (R)")
+plot1
+plot2=interactions::interact_plot(natureContext_duration, modx="home_natureNumeric.mean", pred="socialmedia.cz")
+plot2=plot2+theme_apa()+xlab("Social Media Use Duration") + ylab("Loneliness(R)") +ggtitle("Nature (BP)")
+plot2
+```
+
+```{r sig-results-4, echo=FALSE}
+plot1=interactions::johnson_neyman(transitContext_duration, modx="home_transitNumeric.mean", pred="socialmedia.cz")
+plot1=plot1$plot+xlab("transit (BP)")+ylab("Slope of Social Media and Loneliness (R)")
+plot1
+plot2=interactions::interact_plot(transitContext_duration, modx="home_transitNumeric.mean", pred="socialmedia.cz")
+plot2=plot2+theme_apa()+xlab("Social Media Use Duration") + ylab("Loneliness(R)") +ggtitle("transit (BP)")
+plot2
+```
+
+```{r sig-results-5, echo=FALSE}
+plot1=interactions::johnson_neyman(workContext_duration, modx="home_workNumeric.mean", pred="socialmedia.cz")
+plot1=plot1$plot+xlab("Work (BP)")+ylab("Slope of Social Media and Loneliness (R)")
+plot1
+plot2=interactions::interact_plot(workContext_duration, modx="home_workNumeric.mean", pred="socialmedia.cz")
+plot2=plot2+theme_apa()+xlab("Social Media Use Duration") + ylab("Loneliness(R)") +ggtitle("work (BP)")
+plot2
+```
+
+```{r sig-results-6, echo=FALSE}
+plot1=interactions::johnson_neyman(closeTiesSocialContext_use, modx="closeTiesNumeric.scaled", pred="MediaUse.scaled")
+plot1=plot1$plot+xlab("Close Ties (vs Other Interactions Partners)(WP)")+ylab("Slope of Social Media and Loneliness (R)")
+plot1
+plot2=interactions::interact_plot(closeTiesSocialContext_use, modx="closeTiesNumeric.scaled", pred="MediaUse.scaled")
+plot2=plot2+theme_apa()+xlab("Social Media Use (vs non-Use)") + ylab("Loneliness(R)") +ggtitle("Close Ties (WP)")
+plot2
+```
+
+```{r sig-results-7, echo=FALSE}
+plot1=interactions::johnson_neyman(distantTiesSocialContext_use, modx="distantTiesNumeric.mean", pred="MediaUse.scaled")
+plot1=plot1$plot+xlab("Distant Ties (vs Other Interactions Partners) (BP)")+ylab("Slope of Social Media and Loneliness (R)")
+plot1
+plot2=interactions::interact_plot(distantTiesSocialContext_use, modx="distantTiesNumeric.mean", pred="MediaUse.scaled")
+plot2=plot2+theme_apa()+xlab("Social Media Use (vs non-Use)") + ylab("Loneliness(R)") +ggtitle("Distant Ties (BP)")
+plot2
+```
+
+```{r sig-results-8, echo=FALSE}
+plot1=interactions::johnson_neyman(distantTiesSocialContext_duration, modx="distantTiesNumeric.mean", pred="socialmedia.cz")
+plot1=plot1$plot+xlab("Distant Ties (vs Other Interactions Partners) (BP)")+ylab("Slope of Social Media and Loneliness (R)")
+plot1
+plot2=interactions::interact_plot(distantTiesSocialContext_duration, modx="distantTiesNumeric.mean", pred="socialmedia.cz")
+plot2=plot2+theme_apa()+xlab("Social Media Use Duration") + ylab("Loneliness(R)") +ggtitle("Distant Ties (BP)")
+plot2
+```
+
+```{r, save, echo=FALSE}
+save.image(file = "lonely_exploratory.RData")
+```
+
+
