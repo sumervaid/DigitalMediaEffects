@@ -1,0 +1,341 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+library(sjPlot)
+library(interactions)
+library(jtools)
+main_effect_updated<-read_csv("modelling_data_exploratory.csv")
+
+setwd("~/Desktop/Patti-Valkenburg Rereproduction/Patti Valkenburg Working Paper Analyses Reproduction /Affect Balance Models - Preregistration")
+```
+
+```{r}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, MediaUse.scaled, MediaUse.mean,   demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day) %>%
+  na.omit() %>% dplyr::distinct()
+
+baseline_affect_balance_sm<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                              demog_age.z+
+                              surveys_per_id.z+
+                              overall_study_day+
+                              weekend+
+                              nAct.cz+
+                              lagDur.cz*lagged_affective_balance.cz+
+                              MediaUse.scaled+MediaUse.mean+ 
+                              (1+MediaUse.scaled| id),  na.action = na.exclude, data=mainEffect,
+                            REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, socialmedia.cz, socialmedia.bp.z, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day) %>%
+  na.omit() %>% dplyr::distinct()
+
+baseline_affect_balance_duration<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                                    demog_age.z+
+                                    surveys_per_id.z+
+                                    overall_study_day+
+                                    weekend+
+                                    nAct.cz+
+                                    lagDur.cz*lagged_affective_balance.cz+
+                                    socialmedia.cz+socialmedia.bp.z+
+                                    (1+socialmedia.cz| id),  na.action = na.exclude, data=mainEffect,
+                                  REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, MediaUse.scaled, MediaUse.mean,  demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day, affect_balance_trait.z) %>%
+  na.omit() %>% dplyr::distinct()
+
+
+trait_affect_balance_sm<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                           demog_age.z+
+                           surveys_per_id.z+
+                           overall_study_day+
+                           weekend+
+                           nAct.cz+
+                           lagDur.cz*lagged_affective_balance.cz+
+                           MediaUse.mean*affect_balance_trait.z+MediaUse.scaled*affect_balance_trait.z+
+                           (1+MediaUse.scaled| id),  na.action = na.exclude, data=mainEffect,
+                         REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(trait_affect_balance_sm)
+
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, socialmedia.cz, socialmedia.bp.z, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day, affect_balance_trait.z) %>%
+  na.omit() %>% dplyr::distinct()
+
+
+trait_affect_balance_duration<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                                 demog_age.z+
+                                 surveys_per_id.z+
+                                 overall_study_day+
+                                 weekend+
+                                 nAct.cz+
+                                 lagDur.cz*lagged_affective_balance.cz+
+                                 socialmedia.bp.z*affect_balance_trait.z+socialmedia.cz*affect_balance_trait.z+
+                                 (1+socialmedia.cz| id),  na.action = na.exclude, data=mainEffect,
+                               REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(trait_affect_balance_duration)
+```
+
+
+```{r}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, MediaUse.scaled, MediaUse.mean,   demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day, socialConnectedness.z) %>%
+  na.omit() %>% dplyr::distinct()
+
+
+socialConnectedness_sm<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                               demog_age.z+
+                               surveys_per_id.z+
+                               overall_study_day+
+                               weekend+
+                               nAct.cz+
+                               lagDur.cz*lagged_affective_balance.cz+
+                               MediaUse.mean*socialConnectedness.z+MediaUse.scaled*socialConnectedness.z+
+                               (1+MediaUse.scaled| id),  na.action = na.exclude, data=mainEffect,
+                             REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(socialConnectedness_sm)
+
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, socialmedia.cz, socialmedia.bp.z, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day, socialConnectedness.z) %>%
+  na.omit() %>% dplyr::distinct()
+
+socialConnectedness_duration<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                                     demog_age.z+
+                                     surveys_per_id.z+
+                                     overall_study_day+
+                                     weekend+
+                                     nAct.cz+
+                                     lagDur.cz*lagged_affective_balance.cz+
+                                     socialmedia.bp.z*socialConnectedness.z+socialmedia.cz*socialConnectedness.z+
+                                     (1+socialmedia.cz| id),  na.action = na.exclude, data=mainEffect,
+                                   REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(socialConnectedness_duration)
+```
+
+```{r}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, MediaUse.scaled, MediaUse.mean,   demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day, cesd.z) %>%
+  na.omit() %>% dplyr::distinct()
+
+
+cesd_sm<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                demog_age.z+
+                surveys_per_id.z+
+                overall_study_day+
+                weekend+
+                nAct.cz+
+                lagDur.cz*lagged_affective_balance.cz+
+                MediaUse.mean*cesd.z+MediaUse.scaled*cesd.z+
+                (1+MediaUse.scaled| id),  na.action = na.exclude, data=mainEffect,
+              REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(cesd_sm)
+
+int<-sim_slopes(cesd_sm, pred=MediaUse.scaled, modx=cesd.z, jnplot = TRUE)
+plot<-interact_plot(cesd_sm, pred=MediaUse.scaled, modx=cesd.z) +xlab("Social Media Use (WP)") +ylab("Affect Balance")+theme_apa()+ggtitle("Trait Depression")
+plot
+ggsave("Depression Trait Moderator - Use (WP).png")
+jnplot<-int$jnplot + xlab("Depression") + ylab("Slope of Social Media Use and Affect Balance") +ggtitle("JN Plot")
+jnplot
+ggsave("Depression Trait Moderator - Use - JN Plot (WP).png")
+
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, socialmedia.cz, socialmedia.bp.z, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day, cesd.z) %>%
+  na.omit() %>% dplyr::distinct()
+
+
+cesd_duration<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                      demog_age.z+
+                      surveys_per_id.z+
+                      overall_study_day+
+                      weekend+
+                      nAct.cz+
+                      lagDur.cz*lagged_affective_balance.cz+
+                      socialmedia.bp.z*cesd.z+socialmedia.cz*cesd.z+
+                      (1+socialmedia.cz| id),  na.action = na.exclude, data=mainEffect,
+                    REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(cesd_duration)
+
+int<-sim_slopes(cesd_duration, pred=socialmedia.bp.z, modx=cesd.z, jnplot = TRUE)
+plot<-interact_plot(cesd_duration, pred=socialmedia.bp.z, modx=cesd.z) +xlab("Social Media Use Duration (BP)") +ylab("Affect Balance")+theme_apa()+ggtitle("Trait Depression")
+plot
+ggsave("Depression Trait Moderator - Duration (BP).png")
+jn_plot<-int$jnplot+xlab("Depression Trait") + ylab("Slope of SMU and Affect Balance") + ggtitle("JN Plot")
+ggsave("Depression Trait Moderator - Duration - JN Plot (BP).png")
+```
+
+```{r}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, MediaUse.scaled, MediaUse.mean,   demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day, swls_sum.z) %>%
+  na.omit() %>% dplyr::distinct()
+
+
+swls_sum_sm<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                    demog_age.z+
+                    surveys_per_id.z+
+                    overall_study_day+
+                    weekend+
+                    nAct.cz+
+                    lagDur.cz*lagged_affective_balance.cz+
+                    MediaUse.mean*swls_sum.z+MediaUse.scaled*swls_sum.z+
+                    (1+MediaUse.scaled| id),  na.action = na.exclude, data=mainEffect,
+                  REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(swls_sum_sm)
+
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, socialmedia.cz, socialmedia.bp.z, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day, swls_sum.z) %>%
+  na.omit() %>% dplyr::distinct()
+
+
+swls_sum_duration<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                          demog_age.z+
+                          surveys_per_id.z+
+                          overall_study_day+
+                          weekend+
+                          nAct.cz+
+                          lagDur.cz*lagged_affective_balance.cz+
+                          socialmedia.bp.z*swls_sum.z+socialmedia.cz*swls_sum.z+
+                          (1+socialmedia.cz| id),  na.action = na.exclude, data=mainEffect,
+                        REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(swls_sum_duration)
+```
+
+```{r}
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, MediaUse.scaled, MediaUse.mean,   demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day, uls_mean.z) %>%
+  na.omit() %>% dplyr::distinct()
+
+
+uls_mean_sm<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                    demog_age.z+
+                    surveys_per_id.z+
+                    overall_study_day+
+                    weekend+
+                    nAct.cz+
+                    lagDur.cz*lagged_affective_balance.cz+
+                    MediaUse.mean*uls_mean.z+MediaUse.scaled*uls_mean.z+
+                    (1+MediaUse.scaled| id),  na.action = na.exclude, data=mainEffect,
+                  REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(uls_mean_sm)
+
+
+mainEffect<-main_effect_updated %>%
+  dplyr::select(id, StartDateConvert, affect_balance, demog_age.z, socialmedia.cz, socialmedia.bp.z, demog_sex_recoded, weekend, nAct.cz, surveys_per_id.z, lagDur.cz, lagged_affective_balance.cz, overall_study_day, uls_mean.z) %>%
+  na.omit() %>% dplyr::distinct()
+
+
+uls_mean_duration<-lmer(affect_balance ~ 1 + demog_sex_recoded+    
+                          demog_age.z+
+                          surveys_per_id.z+
+                          overall_study_day+
+                          weekend+
+                          nAct.cz+
+                          lagDur.cz*lagged_affective_balance.cz+
+                          socialmedia.bp.z*uls_mean.z+socialmedia.cz*uls_mean.z+
+                          (1+socialmedia.cz| id),  na.action = na.exclude, data=mainEffect,
+                        REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(uls_mean_duration)
+```
+
+### Table Module 
+
+```{r}
+predLabels=c("Intercept",
+             "Sex", 
+             "Age",
+             "Surveys Per Participant",
+             "Study Day", 
+             "Weekend", 
+             "Number of Activites", 
+             "Duration Since Last EMA", 
+             "Wellbeing at t-1", 
+             "Social Media Use Duration (WP)",
+             "Social Media Use Duration (BP)",
+             "Duration Since Last EMA x Wellbeing at t-1",
+             "Trait Affect Balance", 
+             "Social Media Use Duration (BP) x Affect Balance Trait (BP)", 
+             "Social Media Use Duration (WP) x Affect Balance Trait (BP)", 
+             "Depression",
+             "Social Media Use Duration (BP) x Depression (BP)",
+             "Social Media Use Duration (WP) x Depression (BP)",
+             "Social Connectedness", 
+             "Social Media Use Duration (BP) x Social Connectedness (BP)",
+             "Social Media Use Duration (WP) x Social Connectedness (BP)", 
+             "Satisfaction With Life", 
+             "Social Media Use Duration (BP) x Satisfaction with Life (BP)",
+             "Social Media Use Duration (WP) x Satisfaction with Life (BP)",
+             "Loneliness",
+             "Social Media Use Duration (BP) x Loneliness (BP)",
+             "Social Media Use Duration (WP) x Loneliness (BP)")
+
+dvLabels=c("Baseline Model",
+           "Trait Wellbeing Moderator",
+           "Depression Moderator",
+           "Social Connectedness Moderator",
+           "Satisfaction with Life Moderator",
+           "Loneliness Moderator")
+
+tab_model(baseline_affect_balance_duration, 
+          trait_affect_balance_duration,
+          cesd_duration,
+          socialConnectedness_duration, 
+          swls_sum_duration, 
+          uls_mean_duration,
+          pred.labels = predLabels,
+          dv.labels = dvLabels,
+          file="Duration_WellbeingModerators_AffectBalance.html")
+
+
+predLabels=c("Intercept",
+             "Sex", 
+             "Age",
+             "Surveys Per Participant",
+             "Study Day", 
+             "Weekend", 
+             "Number of Activites", 
+             "Duration Since Last EMA", 
+             "Wellbeing at t-1", 
+             "Social Media Use (vs Non-Use) (WP)",
+             "Social Media Use (vs Non-Use) (BP)",
+             "Duration Since Last EMA x Wellbeing at t-1",
+             "Trait Affect Balance", 
+             "Social Media Use (vs Non-Use) (BP) x Affect Balance Trait (BP)", 
+             "Social Media Use (vs Non-Use) (WP) x Affect Balance Trait (BP)", 
+             "Depression",
+             "Social Media Use (vs Non-Use) (BP) x Depression (BP)",
+             "Social Media Use (vs Non-Use) (WP) x Depression (BP)",
+             "Social Connectedness", 
+             "Social Media Use (vs Non-Use) (BP) x Social Connectedness (BP)",
+             "Social Media Use (vs Non-Use) (WP) x Social Connectedness (BP)", 
+             "Satisfaction With Life", 
+             "Social Media Use (vs Non-Use) (BP) x Satisfaction with Life (BP)",
+             "Social Media Use (vs Non-Use) (WP) x Satisfaction with Life (BP)",
+             "Loneliness",
+             "Social Media Use (vs Non-Use) (BP) x Loneliness (BP)",
+             "Social Media Use (vs Non-Use) (WP) x Loneliness (BP)")
+
+dvLabels=c("Baseline Model",
+           "Trait Wellbeing Moderator",
+           "Depression Moderator",
+           "Social Connectedness Moderator",
+           "Satisfaction with Life Moderator",
+           "Loneliness Moderator")
+
+tab_model(baseline_affect_balance_sm, 
+          trait_affect_balance_sm,
+          cesd_sm,
+          socialConnectedness_sm, 
+          swls_sum_sm, 
+          uls_mean_sm,
+          pred.labels = predLabels,
+          dv.labels = dvLabels,
+          file="UseVsNoUse_WellbeingModerator_AffectBalance.html")
+```
