@@ -4,7 +4,6 @@ output: html_notebook
 ---
 
 ```{r}
-setwd("~/Desktop/Patti-Valkenburg Rereproduction/Patti Valkenburg Working Paper Analyses Reproduction /Lonely Models - Preregistration")
 library(tidyverse)
 library(lme4)
 library(lmerTest)
