@@ -776,11 +776,12 @@ analysis_data<-ema_weekly %>%
   dplyr::left_join(ps, by="id") %>%
   dplyr::distinct()
 
-
 nPPts<-length(unique(analysis_data$id))
 nObs<-length(analysis_data$id)
 
 ### Remove people over 25 and with sex coded as "3"
+
+### 502 observations corresponding to 20 participants were filtered 
 
 analysis_data<-analysis_data %>%
   dplyr::filter(demog_age<=25) %>%
