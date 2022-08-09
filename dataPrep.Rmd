@@ -21,7 +21,7 @@ library(sjPlot)
 library(recipes)
 library(lubridate)
 library(jtools)
-setwd("~/Desktop/OneDrive - Stanford/CoCo - Social Media Use and Psychological Wellbeing/IdiographicWellbeing/DigitalMediaEffects/Data Prep - Preregistration ")
+setwd("~/Desktop/OneDrive - Stanford/CoCo - Social Media Use and Psychological Wellbeing/IdiographicWellbeing/DigitalMediaEffects/Data Prep - Preregistration")
 
 ema_long<-read.csv("04_ema_survey_coco_ut1.csv")
 demogPers<-read_csv("DemogPersFall.csv")
@@ -309,6 +309,50 @@ mlm_data$alone<-ifelse(is.na(mlm_data$people),as.numeric(NA), mlm_data$alone)
 
 i<-mlm_data %>%
   select(alone, id, place)
+
+#### CODING PHYSICAL CONTEXT
+
+### 1 (Bar, party); 2 (Cafe, restaurant); 3 (Friend’s house); 4 (University campus); 5 (Fraternity, sorority house); 6 (Gym); 7 (Home); 8 (Library); 9 (Religious facility); 10 (Store, mall); 11 (Work place (not your home office)); 12 (Vehicle); 13 (Outdoors, park, or in nature); 14 (None of the above, other);
+
+### Study Locations Vs Other Locations 
+
+mlm_data$home_study4<-0
+mlm_data$home_study4<-ifelse(grepl("^4,",mlm_data$place), 1, mlm_data$home_study4)
+mlm_data$home_study4<-ifelse(grepl(",4,",mlm_data$place),1, mlm_data$home_study4)
+mlm_data$home_study4<-ifelse(grepl(",4$",mlm_data$place),1, mlm_data$home_study4)
+mlm_data$home_study4<-ifelse(grepl("^4$",mlm_data$place),1, mlm_data$home_study4)
+
+mlm_data$home_study2<-0
+mlm_data$home_study2<-ifelse(grepl("^8,",mlm_data$place), 1, mlm_data$home_study2)
+mlm_data$home_study2<-ifelse(grepl(",8,",mlm_data$place),1, mlm_data$home_study2)
+mlm_data$home_study2<-ifelse(grepl(",8$",mlm_data$place),1, mlm_data$home_study2)
+mlm_data$home_study2<-ifelse(grepl("^8$",mlm_data$place),1,mlm_data$home_study2)
+
+mlm_data$home_study<-ifelse(mlm_data$home_study4==1 | mlm_data$home_study2==1, 1, 0)
+
+mlm_data$home_study<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_study)
+
+### Gym Locations Vs Other Locations
+
+mlm_data$gym4<-0
+mlm_data$gym4<-ifelse(grepl("^6,",mlm_data$place), 1, mlm_data$gym4)
+mlm_data$gym4<-ifelse(grepl(",6,",mlm_data$place),1, mlm_data$gym4)
+mlm_data$gym4<-ifelse(grepl(",6$",mlm_data$place),1, mlm_data$gym4)
+mlm_data$gym4<-ifelse(grepl("^6$",mlm_data$place),1, mlm_data$gym4)
+
+mlm_data$home_gym<-mlm_data$gym4
+mlm_data$home_gym<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_gym)
+
+### Religious Locations Vs Other Locations
+
+mlm_data$religion4<-0
+mlm_data$religion4<-ifelse(grepl("^9,",mlm_data$place), 1, mlm_data$religion4)
+mlm_data$religion4<-ifelse(grepl(",9,",mlm_data$place),1, mlm_data$religion4)
+mlm_data$religion4<-ifelse(grepl(",9$",mlm_data$place),1, mlm_data$religion4)
+mlm_data$religion4<-ifelse(grepl("^9$",mlm_data$place),1, mlm_data$religion4)
+
+mlm_data$home_religion<-mlm_data$religion4
+mlm_data$home_religion<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_religion)
 ```
 
 
@@ -508,6 +552,9 @@ main_effect_updated<- mlm_data %>%
                 home_work, 
                 home_transit, 
                 home_nature, 
+                home_gym,
+                home_religion,
+                home_study,
                 closeTies, 
                 distantTies, 
                 familyTies, 
@@ -617,7 +664,6 @@ main_effect_updated$home_nature.grandmean<-mean(main_effect_updated$home_natureN
 main_effect_updated$home_natureNumeric.mean<-main_effect_updated$home_natureNumeric.mean - main_effect_updated$home_nature.grandmean
 
 
-
 main_effect_updated$closeTiesNumeric<-as.numeric(as.character(main_effect_updated$closeTies))
 main_effect_updated$closeTiesNumeric.mean<-ave(main_effect_updated$closeTiesNumeric, main_effect_updated$id, FUN=function(x) mean(x, na.rm=T))
 main_effect_updated$closeTiesNumeric.scaled<-main_effect_updated$closeTiesNumeric-main_effect_updated$closeTiesNumeric.mean
@@ -648,8 +694,26 @@ main_effect_updated$alone.scaled<-main_effect_updated$aloneNumeric-main_effect_u
 main_effect_updated$alone.grandmean<-mean(main_effect_updated$aloneNumeric, na.rm=TRUE)
 main_effect_updated$alone.mean<-main_effect_updated$alone.mean - main_effect_updated$alone.grandmean
 
-save(main_effect_updated, file="modelData_centered.RData")
-write.csv(main_effect_updated, file="model_data_centered_new.csv")
+main_effect_updated$home_gymNumeric<-as.numeric(as.character(main_effect_updated$home_gym))
+main_effect_updated$home_gymNumeric.mean<-ave(main_effect_updated$home_gymNumeric, main_effect_updated$id, FUN=function(x) mean(x, na.rm=T))
+main_effect_updated$home_gymNumeric.scaled<-main_effect_updated$home_gymNumeric-main_effect_updated$home_gymNumeric.mean
+main_effect_updated$home_gym.grandmean<-mean(main_effect_updated$home_gymNumeric, na.rm=TRUE)
+main_effect_updated$home_gymNumeric.mean<-main_effect_updated$home_gymNumeric.mean - main_effect_updated$home_gym.grandmean
+
+main_effect_updated$home_studyNumeric<-as.numeric(as.character(main_effect_updated$home_study))
+main_effect_updated$home_studyNumeric.mean<-ave(main_effect_updated$home_studyNumeric, main_effect_updated$id, FUN=function(x) mean(x, na.rm=T))
+main_effect_updated$home_studyNumeric.scaled<-main_effect_updated$home_studyNumeric-main_effect_updated$home_studyNumeric.mean
+main_effect_updated$home_study.grandmean<-mean(main_effect_updated$home_studyNumeric, na.rm=TRUE)
+main_effect_updated$home_studyNumeric.mean<-main_effect_updated$home_studyNumeric.mean - main_effect_updated$home_study.grandmean
+
+main_effect_updated$home_religionNumeric<-as.numeric(as.character(main_effect_updated$home_religion))
+main_effect_updated$home_religionNumeric.mean<-ave(main_effect_updated$home_religionNumeric, main_effect_updated$id, FUN=function(x) mean(x, na.rm=T))
+main_effect_updated$home_religionNumeric.scaled<-main_effect_updated$home_religionNumeric-main_effect_updated$home_religionNumeric.mean
+main_effect_updated$home_religion.grandmean<-mean(main_effect_updated$home_religionNumeric, na.rm=TRUE)
+main_effect_updated$home_religionNumeric.mean<-main_effect_updated$home_religionNumeric.mean - main_effect_updated$home_religion.grandmean
+
+#save(main_effect_updated, file="modelData_centered.RData")
+write.csv(main_effect_updated, file="modelling_data_exploratory_replicate.csv")
 ```
 
 
