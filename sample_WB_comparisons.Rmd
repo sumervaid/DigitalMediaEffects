@@ -1,0 +1,63 @@
+---
+title: "Big5Moderators_Lonely_centered_pooled"
+output: html_document
+date: '2022-09-13'
+---
+
+
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+library(sjPlot)
+library(interactions)
+library(jtools)
+setwd("~/Desktop/socialmediasensitivity/Social media Sensitivity Pooled Analyses/Pooled Analysis  - Dispositions/Lonely ")
+main_effect_updated<-read_csv("modelling_data_pooled.csv")
+```
+
+```{r}
+mainEffectPersonality<-main_effect_updated %>%
+  dplyr::select(id, lonely_r,sample) %>%
+  na.omit() %>% distinct()
+
+baseline_personality_sm<-lmer(lonely_r ~ 1 +sample+
+                                (1| id),  na.action = na.exclude, data=mainEffectPersonality,
+                              REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(baseline_personality_sm)
+
+
+mainEffectPersonality<-main_effect_updated %>%
+  dplyr::select(id, affect_balance,sample) %>%
+  na.omit() %>% distinct()
+
+baseline_personality_sm<-lmer(affect_balance~ 1 +sample+
+                                (1| id),  na.action = na.exclude, data=mainEffectPersonality,
+                              REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(baseline_personality_sm)
+
+mainEffectPersonality<-main_effect_updated %>%
+  dplyr::select(id, stressed_r,sample) %>%
+  na.omit() %>% distinct()
+
+baseline_personality_sm<-lmer(stressed_r~ 1 +sample+
+                                (1| id),  na.action = na.exclude, data=mainEffectPersonality,
+                              REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(baseline_personality_sm)
+
+mainEffectPersonality<-main_effect_updated %>%
+  dplyr::select(id, accepted,sample) %>%
+  na.omit() %>% distinct()
+
+baseline_personality_sm<-lmer(accepted~ 1 +sample+
+                                (1| id),  na.action = na.exclude, data=mainEffectPersonality,
+                              REML = TRUE, control = lmerControl(optimizer ="Nelder_Mead"))
+summary(baseline_personality_sm)
+
+```
+
