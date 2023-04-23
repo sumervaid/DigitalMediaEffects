@@ -1,0 +1,1265 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(reshape2)
+library(lme4)
+library(psych)
+library(lavaan)
+library(GPArotation)
+library(lmerTest)
+library(psych)
+library(ggplot2)
+library(data.table)
+library(entropy)
+library(plyr)
+library(nlme)
+library(sjPlot)
+library(recipes)
+library(lubridate)
+library(jtools)
+setwd("~/Desktop/socialmediasensitivity/Social media Sensitivity Pooled Analyses/Data Prep")
+ema_long<-read.csv("04_ema_survey_coco_ut2.csv")
+demogPers<-read_csv("DemogPersSpring.csv")
+presurvey<-read_csv("01_presurvey_coco_ut2.csv")
+personality<-read_csv("bfi_spring.csv")
+demogPers$X1<-NULL
+```
+
+### Step 1: Basic Data Cleaning
+```{r}
+colnames(ema_long) ## inspecting column names
+
+### Merging EMA and demographics data. Renaming variables for ease of use later
+
+demogPers$id<-demogPers$pID
+
+mlm_data<-ema_long %>%
+  dplyr::left_join(demogPers, by="id") %>%
+  dplyr::rename(angry=momentary_wellbeing_angry_ema,  ## Renaming variables here for ease of use later
+                worried=momentary_wellbeing_worried_ema,
+                happy=momentary_wellbeing_happy_ema, 
+                sad=momentary_wellbeing_sad_ema,
+                stressed=momentary_wellbeing_stressed_ema,
+                lonely=momentary_wellbeing_lonely_ema,
+                accepted=momentary_wellbeing_accepted_ema,
+                socialmedia=momentary_context_social_media_ema,
+                place=momentary_context_place_ema,
+                people=momentary_context_people_ema,
+                activity=momentary_context_activity_ema,
+                interact_mode=soc_interact_mode_ema,
+                interact_partner=soc_interact_partner_ema,
+                interact_topic=soc_interact_topic_ema) %>%
+  dplyr::select(id, StartDateConvert, overall_study_day,participant_study_day, surveys_per_id, days_per_id, time_of_day, weekend, angry, worried, happy, sad, stressed, lonely, accepted, socialmedia, place, people, activity, interact_mode, interact_partner, interact_topic, demog_sex, demog_age, cesd, socialConnectedness)
+
+# NOTE: Merging the EMA data with demographic data through the id column  ## selecting relevant columns
+
+### Add a column for participant specific observational instances
+mlm_data<- mlm_data %>%
+ arrange(id, StartDateConvert) %>%
+  dplyr::group_by(id) %>%
+  dplyr::mutate(instance=row_number())
+
+### Compute time that has passed since the start of the study for each observation in the dataset
+## Convert dates into date format using lubridate
+mlm_data$StartDate<-ymd_hms(mlm_data$StartDateConvert)
+
+## Specify the start of the study (date)
+mlm_data$day1<-ymd_hms("2020-10-22 08:00:00")
+
+## Order data-frame by id and in increasing StartDate values
+mlm_data <- mlm_data[order(mlm_data$id, mlm_data$StartDate),] 
+
+## Create a new variable for how much time has passed since the start of the study by subtracting instance date and study startdate
+mlm_data<- mlm_data %>%
+  mutate(time = round(as.numeric(StartDate-day1, units = 'hours')))
+str(mlm_data$time)
+head(mlm_data$time)
+
+### Aggregate Wellbeing Scores
+
+mlm_data<-mlm_data %>%
+  dplyr::mutate(
+      angry_r=case_when(
+      angry=="1" & !is.na(angry) ~ 4, 
+      angry=="2" & !is.na(angry) ~ 3, 
+      angry=="3" & !is.na(angry) ~ 2, 
+      angry=="4" & !is.na(angry) ~ 1),
+  worried_r=case_when(
+     worried=="1" & !is.na(worried) ~ 4, 
+     worried=="2" & !is.na(worried) ~ 3, 
+     worried=="3" & !is.na(worried) ~ 2, 
+     worried=="4" & !is.na(worried) ~ 1),
+  sad_r=case_when(
+    sad=="1" & !is.na(sad) ~ 4, 
+    sad=="2" & !is.na(sad) ~ 3, 
+    sad=="3" & !is.na(sad) ~ 2, 
+    sad=="4" & !is.na(sad) ~ 1),
+  stressed_r=case_when(
+    stressed=="1" & !is.na(stressed) ~ 4, 
+    stressed=="2" & !is.na(stressed) ~ 3, 
+    stressed=="3" & !is.na(stressed) ~ 2, 
+    stressed=="4" & !is.na(stressed) ~ 1),
+  lonely_r=case_when(
+    lonely=="1" & !is.na(lonely) ~ 4, 
+    lonely=="2" & !is.na(lonely) ~ 3, 
+    lonely=="3" & !is.na(lonely) ~ 2, 
+    lonely=="4" & !is.na(lonely) ~ 1)
+  )
+
+select_vars<-mlm_data[,c("angry_r", "worried_r", "happy", "sad_r", "stressed_r", "lonely_r")]
+mlm_data$wellbeing<-rowMeans(select_vars, na.rm = TRUE)
+
+mlm_data$negative_affect <- apply(mlm_data[c("angry", "worried", "sad")], 1, function(x) {mean(x, na.rm = TRUE)})
+mlm_data$affect_balance <- mlm_data$happy - mlm_data$negative_affect
+```
+
+### Making a new variable for Media Use 
+```{r}
+mlm_data$MediaUse<-ifelse(grepl("^5,",mlm_data$activity), 1, 0)
+mlm_data$MediaUse<-ifelse(grepl(",5,",mlm_data$activity),1, mlm_data$MediaUse)
+mlm_data$MediaUse<-ifelse(grepl(",5$",mlm_data$activity),1, mlm_data$MediaUse)
+mlm_data$MediaUse<-ifelse(grepl("^5$",mlm_data$activity),1, mlm_data$MediaUse)
+mlm_data$MediaUse<-ifelse(is.na(mlm_data$activity),as.numeric(NA), mlm_data$MediaUse)
+
+i<-mlm_data %>%
+  select(MediaUse, activity, id)
+
+mlm_data$MediaUse<-factor(mlm_data$MediaUse)
+mlm_data$MediaUse<-relevel(mlm_data$MediaUse, ref="0")
+levels(mlm_data$MediaUse)
+
+mlm_data$internetUse<-ifelse(grepl("4", mlm_data$activity), 1, 0)
+mlm_data$excercise<-ifelse(grepl("8", mlm_data$activity), 1, 0)
+mlm_data$covid<-ifelse(grepl("16", mlm_data$activity), 1, 0)
+```
+
+### Making new variables for Contexts
+
+```{r}
+mlm_data$ties_num<-ifelse(grepl("1|2|7", mlm_data$people), 1, 
+                                        (ifelse(grepl("3|4|5|6", mlm_data$people), 2, 
+                                                ifelse(grepl("8", mlm_data$people), 0, NA))))
+
+mlm_data$ties_num<-factor(mlm_data$ties_num)
+mlm_data$ties_num<-relevel(mlm_data$ties_num, ref="0")
+
+mlm_data$old<-ifelse(grepl("1|2|3|5", mlm_data$place), 1,0)
+
+
+### Close Ties Vs Alone
+mlm_data$closeTies4<-0
+mlm_data$closeTies4<-ifelse(grepl("^4,",mlm_data$people), 1, mlm_data$closeTies4)
+mlm_data$closeTies4<-ifelse(grepl(",4,",mlm_data$people),1, mlm_data$closeTies4)
+mlm_data$closeTies4<-ifelse(grepl(",4$",mlm_data$people),1, mlm_data$closeTies4)
+mlm_data$closeTies4<-ifelse(grepl("^4$",mlm_data$people),1, mlm_data$closeTies4)
+mlm_data$closeTies2<-0
+mlm_data$closeTies2<-ifelse(grepl("^5,",mlm_data$people), 1, mlm_data$closeTies2)
+mlm_data$closeTies2<-ifelse(grepl(",5,",mlm_data$people),1, mlm_data$closeTies2)
+mlm_data$closeTies2<-ifelse(grepl(",5$",mlm_data$people),1, mlm_data$closeTies2)
+mlm_data$closeTies2<-ifelse(grepl("^5$",mlm_data$people),1,mlm_data$closeTies2)
+mlm_data$closeTies3<-0
+mlm_data$closeTies3<-ifelse(grepl("^6,",mlm_data$people), 1, mlm_data$closeTies3)
+mlm_data$closeTies3<-ifelse(grepl(",6,",mlm_data$people),1, mlm_data$closeTies3)
+mlm_data$closeTies3<-ifelse(grepl(",6$",mlm_data$people),1, mlm_data$closeTies3)
+mlm_data$closeTies3<-ifelse(grepl("^6$",mlm_data$people),1, mlm_data$closeTies3)
+
+mlm_data$closeTies<-ifelse(mlm_data$closeTies4==1 | mlm_data$closeTies2==1 | mlm_data$closeTies3==1, 1, 0)
+
+mlm_data$closeTies<-ifelse(is.na(mlm_data$people),as.numeric(NA), mlm_data$closeTies)
+
+i<-mlm_data %>%
+  select(closeTies, id, people)
+### Distant Ties Vs Alone
+mlm_data$distantTies4<-0
+mlm_data$distantTies4<-ifelse(grepl("^1,",mlm_data$people), 1, mlm_data$distantTies4)
+mlm_data$distantTies4<-ifelse(grepl(",1,",mlm_data$people),1, mlm_data$distantTies4)
+mlm_data$distantTies4<-ifelse(grepl(",1$",mlm_data$people),1, mlm_data$distantTies4)
+mlm_data$distantTies4<-ifelse(grepl("^1$",mlm_data$people),1, mlm_data$distantTies4)
+mlm_data$distantTies2<-0
+mlm_data$distantTies2<-ifelse(grepl("^2,",mlm_data$people), 1, mlm_data$distantTies2)
+mlm_data$distantTies2<-ifelse(grepl(",2,",mlm_data$people),1, mlm_data$distantTies2)
+mlm_data$distantTies2<-ifelse(grepl(",2$",mlm_data$people),1, mlm_data$distantTies2)
+mlm_data$distantTies2<-ifelse(grepl("^2$",mlm_data$people),1,mlm_data$distantTies2)
+mlm_data$distantTies3<-0
+mlm_data$distantTies3<-ifelse(grepl("^7,",mlm_data$people), 1, mlm_data$distantTies3)
+mlm_data$distantTies3<-ifelse(grepl(",7,",mlm_data$people),1, mlm_data$distantTies3)
+mlm_data$distantTies3<-ifelse(grepl(",7$",mlm_data$people),1, mlm_data$distantTies3)
+mlm_data$distantTies3<-ifelse(grepl("^7$",mlm_data$people),1, mlm_data$distantTies3)
+
+mlm_data$distantTies<-ifelse(mlm_data$distantTies4==1 | mlm_data$distantTies2==1 | mlm_data$distantTies3==1, 1, 0)
+
+mlm_data$distantTies<-ifelse(is.na(mlm_data$people),as.numeric(NA), mlm_data$distantTies)
+
+i<-mlm_data %>%
+  select(distantTies, id, people)
+
+### Family vs Alone
+
+mlm_data$familyTies4<-0
+mlm_data$familyTies4<-ifelse(grepl("^3,",mlm_data$people), 1, mlm_data$familyTies4)
+mlm_data$familyTies4<-ifelse(grepl(",3,",mlm_data$people),1, mlm_data$familyTies4)
+mlm_data$familyTies4<-ifelse(grepl(",3$",mlm_data$people),1, mlm_data$familyTies4)
+mlm_data$familyTies4<-ifelse(grepl("^3$",mlm_data$people),1, mlm_data$familyTies4)
+
+mlm_data$familyTies<-mlm_data$familyTies4
+
+mlm_data$familyTies<-ifelse(is.na(mlm_data$people),as.numeric(NA), mlm_data$familyTies)
+
+
+i<-mlm_data %>%
+  select(familyTies, id, people)
+
+### Social Locations 
+
+mlm_data$home_social4<-0
+mlm_data$home_social4<-ifelse(grepl("^1,",mlm_data$place), 1, mlm_data$home_social4)
+mlm_data$home_social4<-ifelse(grepl(",1,",mlm_data$place),1, mlm_data$home_social4)
+mlm_data$home_social4<-ifelse(grepl(",1$",mlm_data$place),1, mlm_data$home_social4)
+mlm_data$home_social4<-ifelse(grepl("^1$",mlm_data$place),1, mlm_data$home_social4)
+
+mlm_data$home_social2<-0
+mlm_data$home_social2<-ifelse(grepl("^2,",mlm_data$place), 1, mlm_data$home_social2)
+mlm_data$home_social2<-ifelse(grepl(",2,",mlm_data$place),1, mlm_data$home_social2)
+mlm_data$home_social2<-ifelse(grepl(",2$",mlm_data$place),1, mlm_data$home_social2)
+mlm_data$home_social2<-ifelse(grepl("^2$",mlm_data$place),1,mlm_data$home_social2)
+mlm_data$home_social3<-0
+mlm_data$home_social3<-ifelse(grepl("^3,",mlm_data$place), 1, mlm_data$home_social3)
+mlm_data$home_social3<-ifelse(grepl(",3,",mlm_data$place),1, mlm_data$home_social3)
+mlm_data$home_social3<-ifelse(grepl(",3$",mlm_data$place),1, mlm_data$home_social3)
+mlm_data$home_social3<-ifelse(grepl("^3$",mlm_data$place),1, mlm_data$home_social3)
+
+mlm_data$home_social5<-0
+mlm_data$home_social5<-ifelse(grepl("^5,",mlm_data$place), 1, mlm_data$home_social5)
+mlm_data$home_social5<-ifelse(grepl(",5,",mlm_data$place),1, mlm_data$home_social5)
+mlm_data$home_social5<-ifelse(grepl(",5$",mlm_data$place),1, mlm_data$home_social5)
+mlm_data$home_social5<-ifelse(grepl("^5$",mlm_data$place),1, mlm_data$home_social5)
+
+mlm_data$home_social<-ifelse(mlm_data$home_social4==1 | mlm_data$home_social2==1 | mlm_data$home_social3==1 |mlm_data$home_social5==1, 1, 0)
+
+mlm_data$home_social<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_social)
+
+i<-mlm_data %>%
+  select(home_social, id, place)
+
+inspect<-mlm_data %>%
+  select(home_social, place, id)
+
+mlm_data$home_social<-factor(mlm_data$home_social)
+mlm_data$home_social<-relevel(mlm_data$home_social, ref="0")
+levels(mlm_data$home_social)
+
+mlm_data$home_nature<-ifelse(grepl("13", mlm_data$place), 1, 0)
+mlm_data$home_nature<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_nature)
+
+i<-mlm_data %>%
+  select(home_nature, place, id )
+
+mlm_data$home_nature<-factor(mlm_data$home_nature)
+mlm_data$home_nature<-relevel(mlm_data$home_nature, ref="0")
+levels(mlm_data$home_nature)
+
+mlm_data$home_work<-ifelse(grepl("11", mlm_data$place), 1, 0)
+
+mlm_data$home_work<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_work)
+
+mlm_data$home_work<-factor(mlm_data$home_work)
+mlm_data$home_work<-relevel(mlm_data$home_work, ref="0")
+levels(mlm_data$home_work)
+
+mlm_data$home_transit<-ifelse(grepl("12", mlm_data$place), 1, 0)
+mlm_data$home_transit<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_transit)
+
+
+mlm_data$home_transit<-factor(mlm_data$home_transit)
+mlm_data$home_transit<-relevel(mlm_data$home_transit, ref="0")
+levels(mlm_data$home_transit)
+
+mlm_data$home4<-0
+mlm_data$home4<-ifelse(grepl("^7,",mlm_data$place), 1, mlm_data$home4)
+mlm_data$home4<-ifelse(grepl(",7,",mlm_data$place),1, mlm_data$home4)
+mlm_data$home4<-ifelse(grepl(",7$",mlm_data$place),1, mlm_data$home4)
+mlm_data$home4<-ifelse(grepl("^7$",mlm_data$place),1, mlm_data$home4)
+
+mlm_data$home<-mlm_data$home4
+mlm_data$home<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home)
+
+
+i<-mlm_data %>%
+  select(home, id, place)
+
+mlm_data$home<-factor(mlm_data$home)
+mlm_data$home<-relevel(mlm_data$home, ref="0")
+
+### Alone 
+
+mlm_data$alone4<-0
+mlm_data$alone4<-ifelse(grepl("^8,",mlm_data$people), 1, mlm_data$alone4)
+mlm_data$alone4<-ifelse(grepl(",8,",mlm_data$people),1, mlm_data$alone4)
+mlm_data$alone4<-ifelse(grepl(",8$",mlm_data$people),1, mlm_data$alone4)
+mlm_data$alone4<-ifelse(grepl("^8$",mlm_data$people),1, mlm_data$alone4)
+
+mlm_data$alone<-mlm_data$alone4
+mlm_data$alone<-ifelse(is.na(mlm_data$people),as.numeric(NA), mlm_data$alone)
+
+i<-mlm_data %>%
+  select(alone, id, place)
+
+#### CODING PHYSICAL CONTEXT
+
+### 1 (Bar, party); 2 (Cafe, restaurant); 3 (Friend’s house); 4 (University campus); 5 (Fraternity, sorority house); 6 (Gym); 7 (Home); 8 (Library); 9 (Religious facility); 10 (Store, mall); 11 (Work place (not your home office)); 12 (Vehicle); 13 (Outdoors, park, or in nature); 14 (None of the above, other);
+
+### Study Locations Vs Other Locations 
+
+mlm_data$home_study4<-0
+mlm_data$home_study4<-ifelse(grepl("^4,",mlm_data$place), 1, mlm_data$home_study4)
+mlm_data$home_study4<-ifelse(grepl(",4,",mlm_data$place),1, mlm_data$home_study4)
+mlm_data$home_study4<-ifelse(grepl(",4$",mlm_data$place),1, mlm_data$home_study4)
+mlm_data$home_study4<-ifelse(grepl("^4$",mlm_data$place),1, mlm_data$home_study4)
+
+mlm_data$home_study2<-0
+mlm_data$home_study2<-ifelse(grepl("^8,",mlm_data$place), 1, mlm_data$home_study2)
+mlm_data$home_study2<-ifelse(grepl(",8,",mlm_data$place),1, mlm_data$home_study2)
+mlm_data$home_study2<-ifelse(grepl(",8$",mlm_data$place),1, mlm_data$home_study2)
+mlm_data$home_study2<-ifelse(grepl("^8$",mlm_data$place),1,mlm_data$home_study2)
+
+mlm_data$home_study<-ifelse(mlm_data$home_study4==1 | mlm_data$home_study2==1, 1, 0)
+
+mlm_data$home_study<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_study)
+
+### Gym Locations Vs Other Locations
+
+mlm_data$gym4<-0
+mlm_data$gym4<-ifelse(grepl("^6,",mlm_data$place), 1, mlm_data$gym4)
+mlm_data$gym4<-ifelse(grepl(",6,",mlm_data$place),1, mlm_data$gym4)
+mlm_data$gym4<-ifelse(grepl(",6$",mlm_data$place),1, mlm_data$gym4)
+mlm_data$gym4<-ifelse(grepl("^6$",mlm_data$place),1, mlm_data$gym4)
+
+mlm_data$home_gym<-mlm_data$gym4
+mlm_data$home_gym<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_gym)
+
+### Religious Locations Vs Other Locations
+
+mlm_data$religion4<-0
+mlm_data$religion4<-ifelse(grepl("^9,",mlm_data$place), 1, mlm_data$religion4)
+mlm_data$religion4<-ifelse(grepl(",9,",mlm_data$place),1, mlm_data$religion4)
+mlm_data$religion4<-ifelse(grepl(",9$",mlm_data$place),1, mlm_data$religion4)
+mlm_data$religion4<-ifelse(grepl("^9$",mlm_data$place),1, mlm_data$religion4)
+
+mlm_data$home_religion<-mlm_data$religion4
+mlm_data$home_religion<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_religion)
+```
+
+
+### Data Wrangling Procedures
+
+```{r}
+count_na <- function(x) sum(!is.na(x)) 
+
+### Filtering to keep only those participants with at-least 33% of the total required EMAs.
+## Total Number of Possible EMAs = 196
+## Minimum Number of EMas required to obtain credit for the assignment = 56
+## Past research has retained participants with atleast 33% of the minimum number of required EMAs
+### 33% of 56 = 18.48 = 19
+
+count.ppt_preFilter<-length(unique(mlm_data$id))
+ppt_preFilter<-unique(mlm_data$id)
+
+count.obs_preFilter<-length(mlm_data$id)
+
+mlm_data<-mlm_data %>%
+  dplyr::mutate(wb=if_else(!is.na(wellbeing), 1, 999999999),
+                wb_sm=if_else(!is.na(activity), wb, 999999999),
+                wb_sm_naCheck=na_if(wb_sm, 999999999)) %>%
+  dplyr::select(-c(wb, wb_sm)) %>%
+  dplyr::mutate(sum=sum(wb_sm_naCheck, na.rm=TRUE)) %>%
+  dplyr::filter(sum>19)
+
+count.ppt_postFilter<-length(unique(mlm_data$id))
+ppt_postFilter<-unique(mlm_data$id)
+
+count.obs_postFilter<-length(mlm_data$id)
+nFilteredPPt<-count.ppt_preFilter-count.ppt_postFilter ### 49 participants were filtered
+nFilteredObs<-count.obs_preFilter-count.obs_postFilter ### Across 317 participants, 577 observations were filtered
+
+ppt_idsFiltered<-dplyr::setdiff(ppt_preFilter, ppt_postFilter)
+
+```
+
+```{r}
+#### Computing Lagged Duration
+### Computing Pertinent Duration Measures
+mlm_data <- mlm_data[order(mlm_data$id, mlm_data$StartDate),]
+mlm_data <- mlm_data %>%
+  ungroup() %>%
+  dplyr::group_by(id) %>%
+  dplyr::mutate(time_diff = round(as.numeric(StartDate-lag(StartDate), units = 'hours'))) %>% ### compute duration since last EMA was completed
+  dplyr::mutate(lagDur=if_else(!is.na(wellbeing), time_diff, 999999999)) %>% ### impute missing values for duration since last response if wellbeing scores are missing
+  dplyr::mutate(lagDur2=na_if(lagDur, "999999999")) %>% ## replace custom missing values with NA values
+  dplyr::mutate(nAct=count.fields(textConnection(activity), sep = ",")) 
+
+inspect1<-mlm_data %>%
+  select(id, StartDate, activity, wellbeing, nAct, time_diff,lagDur, lagDur2, 
+         angry_r, worried_r, happy, sad_r, stressed_r, lonely_r)
+```
+
+
+### Step 4: Add in personality and trait wellbeing metrics.
+
+```{r}
+personality_merge<-personality %>%
+  dplyr::select(bfi_a, bfi_c, bfi_e, bfi_n, bfi_o, id) %>%
+  dplyr::rename(Agreeableness=bfi_a,
+                Extraversion=bfi_e,
+                Neuroticism=bfi_n,
+                Openness=bfi_o,
+                Conscientiousness=bfi_c) %>%
+  distinct()
+
+mlm_data<-mlm_data %>%
+  dplyr::left_join(personality_merge, by="id")
+
+ps_select<-presurvey %>%
+  dplyr::select(id, contains("swls"), contains("awb"), contains("uls"), contains("media"))
+
+select_vars<-ps_select[,c("swls_1_t1", "swls_2_t1", "swls_3_t1", "swls_4_t1", "swls_5_t1")]
+ps_select$swls_sum<-rowSums(select_vars, na.rm = TRUE)
+
+
+select_vars<-ps_select[,c("uls_1_t1", "uls_2_t1", "uls_3_t1", "uls_4_t1", "uls_5_t1", "uls_6_t1", "uls_7_t1", "uls_8_t1", "uls_9_t1")]
+ps_select$uls_mean<-rowMeans(select_vars, na.rm = TRUE)
+
+mlm_data<-mlm_data %>%
+  dplyr::left_join(ps_select, by="id") %>%
+  dplyr::rename(AngryTrait=awb_1_t1,
+                WorriedTrait=awb_2_t1,
+                HappyTrait=awb_3_t1,
+                SadTrait=awb_4_t1,
+                EnthuTrait=awb_5_t1,
+                RelaxedTrait=awb_6_t1)
+  
+mlm_data<-mlm_data %>%
+  dplyr::mutate(
+    angryTrait_r=case_when(
+    AngryTrait=="1" & !is.na(AngryTrait) ~ 5, 
+    AngryTrait=="2"  & !is.na(AngryTrait) ~ 4, 
+    AngryTrait=="3" & !is.na(AngryTrait) ~ 3, 
+    AngryTrait=="4" & !is.na(AngryTrait) ~ 2,
+    AngryTrait=="5" & !is.na(AngryTrait) ~ 1),
+  worriedTrait_r=case_when(
+    WorriedTrait=="1" & !is.na(WorriedTrait) ~ 5, 
+    WorriedTrait=="2" & !is.na(WorriedTrait) ~ 4, 
+    WorriedTrait=="3" & !is.na(WorriedTrait) ~ 3, 
+    WorriedTrait=="4" & !is.na(WorriedTrait) ~ 2,
+    WorriedTrait=="5" & !is.na(WorriedTrait) ~ 1),
+  sadTrait_r=case_when(
+    SadTrait=="1" & !is.na(SadTrait) ~ 5, 
+    SadTrait=="2" & !is.na(SadTrait) ~ 4, 
+    SadTrait=="3" & !is.na(SadTrait) ~ 3, 
+    SadTrait=="4" & !is.na(SadTrait) ~ 2,
+    SadTrait=="5" & !is.na(SadTrait) ~ 1))
+
+
+select_vars<-mlm_data[,c("angryTrait_r", "worriedTrait_r", "HappyTrait", "sadTrait_r", "EnthuTrait", "RelaxedTrait")]
+mlm_data$trait_wellbeing<-rowMeans(select_vars, na.rm = TRUE)
+
+mlm_data$negative_affect_trait <- apply(mlm_data[c("AngryTrait", "WorriedTrait", "SadTrait")], 1, function(x) {mean(x, na.rm = TRUE)})
+mlm_data$affect_balance_trait <- mlm_data$HappyTrait - mlm_data$negative_affect_trait
+```
+
+### Step 5: Filter by Age and Sex
+
+```{r}
+nObsSexFilter<-mlm_data %>%
+  filter(demog_sex==3) %>%
+  select(id, demog_sex)
+
+nPPtsSexFilter<-nObsSexFilter %>%
+  select(id) %>%
+  distinct()
+
+nObsAgeFilter<-mlm_data %>%
+  filter(demog_age>=25) %>%
+  select(id, demog_age)
+
+nPPtsAgeFilter<-nObsAgeFilter %>%
+  select(id) %>%
+  distinct()
+
+count.obs_preAgeSexFilter<-length(mlm_data$id)
+count.ppt_preAgeSexFilter<-length(unique(mlm_data$id))
+ppt_preAgeSexFilter<-unique(mlm_data$id)
+
+min(mlm_data$demog_age) ### Minimum age is 17 because some folks turned 18 after completing demographics but before EMAs started so they are included in the analyses. 
+
+mlm_data<-mlm_data %>%
+  dplyr::filter(demog_age<=25) %>%
+  dplyr::filter(demog_sex != 3)
+
+count.obs_postAgeSexFilter<-length(mlm_data$id)
+count.ppt_postAgeSexFilter<-length(unique(mlm_data$id))
+ppt_postAgeSexFilter<-unique(mlm_data$id)
+nPptsFilteredAgeSex<-count.ppt_preAgeSexFilter-count.ppt_postAgeSexFilter
+nObsFilteredAgeSex<-count.obs_preAgeSexFilter-count.obs_postAgeSexFilter
+
+mlm_data_spring<-mlm_data
+```
+
+
+
+```{r}
+setwd("~/Desktop/socialmediasensitivity/Social media Sensitivity Pooled Analyses/Data Prep")
+
+
+ema_long<-read.csv("04_ema_survey_coco_ut1.csv")
+demogPers<-read_csv("DemogPersFall.csv")
+presurvey<-read_csv("01_presurvey_coco_ut1.csv")
+personality<-read_csv("bfi_corrected.csv")
+demogPers$X1<-NULL
+```
+
+
+```{r}
+colnames(ema_long) ## inspecting column names
+
+### Merging EMA and demographics data. Renaming variables for ease of use later
+
+demogPers$id<-demogPers$pID
+
+mlm_data<-ema_long %>%
+  dplyr::left_join(demogPers, by="id") %>%
+  dplyr::rename(angry=momentary_wellbeing_angry_ema,  ## Renaming variables here for ease of use later
+                worried=momentary_wellbeing_worried_ema,
+                happy=momentary_wellbeing_happy_ema, 
+                sad=momentary_wellbeing_sad_ema,
+                stressed=momentary_wellbeing_stressed_ema,
+                lonely=momentary_wellbeing_lonely_ema,
+                accepted=momentary_wellbeing_accepted_ema,
+                socialmedia=momentary_context_social_media_ema,
+                place=momentary_context_place_ema,
+                people=momentary_context_people_ema,
+                activity=momentary_context_activity_ema,
+                interact_mode=soc_interact_mode_ema,
+                interact_partner=soc_interact_partner_ema,
+                interact_topic=soc_interact_topic_ema) %>%
+  dplyr::select(id, StartDateConvert, overall_study_day,participant_study_day, surveys_per_id, days_per_id, time_of_day, weekend, angry, worried, happy, sad, stressed, lonely, accepted, socialmedia, place, people, activity, interact_mode, interact_partner, interact_topic, demog_sex, demog_age, cesd, socialConnectedness)
+
+# NOTE: Merging the EMA data with demographic data through the id column  ## selecting relevant columns
+
+### Add a column for participant specific observational instances
+mlm_data<- mlm_data %>%
+ arrange(id, StartDateConvert) %>%
+  dplyr::group_by(id) %>%
+  dplyr::mutate(instance=row_number())
+
+### Compute time that has passed since the start of the study for each observation in the dataset
+## Convert dates into date format using lubridate
+mlm_data$StartDate<-ymd_hms(mlm_data$StartDateConvert)
+
+## Specify the start of the study (date)
+mlm_data$day1<-ymd_hms("2020-10-22 08:00:00")
+
+## Order data-frame by id and in increasing StartDate values
+mlm_data <- mlm_data[order(mlm_data$id, mlm_data$StartDate),] 
+
+## Create a new variable for how much time has passed since the start of the study by subtracting instance date and study startdate
+mlm_data<- mlm_data %>%
+  mutate(time = round(as.numeric(StartDate-day1, units = 'hours')))
+str(mlm_data$time)
+head(mlm_data$time)
+
+### Aggregate Wellbeing Scores
+
+mlm_data<-mlm_data %>%
+  dplyr::mutate(
+      angry_r=case_when(
+      angry=="1" & !is.na(angry) ~ 4, 
+      angry=="2" & !is.na(angry) ~ 3, 
+      angry=="3" & !is.na(angry) ~ 2, 
+      angry=="4" & !is.na(angry) ~ 1),
+  worried_r=case_when(
+     worried=="1" & !is.na(worried) ~ 4, 
+     worried=="2" & !is.na(worried) ~ 3, 
+     worried=="3" & !is.na(worried) ~ 2, 
+     worried=="4" & !is.na(worried) ~ 1),
+  sad_r=case_when(
+    sad=="1" & !is.na(sad) ~ 4, 
+    sad=="2" & !is.na(sad) ~ 3, 
+    sad=="3" & !is.na(sad) ~ 2, 
+    sad=="4" & !is.na(sad) ~ 1),
+  stressed_r=case_when(
+    stressed=="1" & !is.na(stressed) ~ 4, 
+    stressed=="2" & !is.na(stressed) ~ 3, 
+    stressed=="3" & !is.na(stressed) ~ 2, 
+    stressed=="4" & !is.na(stressed) ~ 1),
+  lonely_r=case_when(
+    lonely=="1" & !is.na(lonely) ~ 4, 
+    lonely=="2" & !is.na(lonely) ~ 3, 
+    lonely=="3" & !is.na(lonely) ~ 2, 
+    lonely=="4" & !is.na(lonely) ~ 1)
+  )
+
+select_vars<-mlm_data[,c("angry_r", "worried_r", "happy", "sad_r", "stressed_r", "lonely_r")]
+mlm_data$wellbeing<-rowMeans(select_vars, na.rm = TRUE)
+
+mlm_data$negative_affect <- apply(mlm_data[c("angry", "worried", "sad")], 1, function(x) {mean(x, na.rm = TRUE)})
+mlm_data$affect_balance <- mlm_data$happy - mlm_data$negative_affect
+
+```
+
+### Making a new variable for Media Use 
+```{r}
+mlm_data$MediaUse<-ifelse(grepl("^5,",mlm_data$activity), 1, 0)
+mlm_data$MediaUse<-ifelse(grepl(",5,",mlm_data$activity),1, mlm_data$MediaUse)
+mlm_data$MediaUse<-ifelse(grepl(",5$",mlm_data$activity),1, mlm_data$MediaUse)
+mlm_data$MediaUse<-ifelse(grepl("^5$",mlm_data$activity),1, mlm_data$MediaUse)
+mlm_data$MediaUse<-ifelse(is.na(mlm_data$activity),as.numeric(NA), mlm_data$MediaUse)
+
+i<-mlm_data %>%
+  select(MediaUse, activity, id)
+
+mlm_data$MediaUse<-factor(mlm_data$MediaUse)
+mlm_data$MediaUse<-relevel(mlm_data$MediaUse, ref="0")
+levels(mlm_data$MediaUse)
+
+mlm_data$internetUse<-ifelse(grepl("4", mlm_data$activity), 1, 0)
+mlm_data$excercise<-ifelse(grepl("8", mlm_data$activity), 1, 0)
+mlm_data$covid<-ifelse(grepl("16", mlm_data$activity), 1, 0)
+```
+
+### Making new variables for Contexts
+
+```{r}
+mlm_data$ties_num<-ifelse(grepl("1|2|7", mlm_data$people), 1, 
+                                        (ifelse(grepl("3|4|5|6", mlm_data$people), 2, 
+                                                ifelse(grepl("8", mlm_data$people), 0, NA))))
+
+mlm_data$ties_num<-factor(mlm_data$ties_num)
+mlm_data$ties_num<-relevel(mlm_data$ties_num, ref="0")
+
+mlm_data$old<-ifelse(grepl("1|2|3|5", mlm_data$place), 1,0)
+
+
+### Close Ties Vs Alone
+mlm_data$closeTies4<-0
+mlm_data$closeTies4<-ifelse(grepl("^4,",mlm_data$people), 1, mlm_data$closeTies4)
+mlm_data$closeTies4<-ifelse(grepl(",4,",mlm_data$people),1, mlm_data$closeTies4)
+mlm_data$closeTies4<-ifelse(grepl(",4$",mlm_data$people),1, mlm_data$closeTies4)
+mlm_data$closeTies4<-ifelse(grepl("^4$",mlm_data$people),1, mlm_data$closeTies4)
+mlm_data$closeTies2<-0
+mlm_data$closeTies2<-ifelse(grepl("^5,",mlm_data$people), 1, mlm_data$closeTies2)
+mlm_data$closeTies2<-ifelse(grepl(",5,",mlm_data$people),1, mlm_data$closeTies2)
+mlm_data$closeTies2<-ifelse(grepl(",5$",mlm_data$people),1, mlm_data$closeTies2)
+mlm_data$closeTies2<-ifelse(grepl("^5$",mlm_data$people),1,mlm_data$closeTies2)
+mlm_data$closeTies3<-0
+mlm_data$closeTies3<-ifelse(grepl("^6,",mlm_data$people), 1, mlm_data$closeTies3)
+mlm_data$closeTies3<-ifelse(grepl(",6,",mlm_data$people),1, mlm_data$closeTies3)
+mlm_data$closeTies3<-ifelse(grepl(",6$",mlm_data$people),1, mlm_data$closeTies3)
+mlm_data$closeTies3<-ifelse(grepl("^6$",mlm_data$people),1, mlm_data$closeTies3)
+
+mlm_data$closeTies<-ifelse(mlm_data$closeTies4==1 | mlm_data$closeTies2==1 | mlm_data$closeTies3==1, 1, 0)
+
+mlm_data$closeTies<-ifelse(is.na(mlm_data$people),as.numeric(NA), mlm_data$closeTies)
+
+i<-mlm_data %>%
+  select(closeTies, id, people)
+### Distant Ties Vs Alone
+mlm_data$distantTies4<-0
+mlm_data$distantTies4<-ifelse(grepl("^1,",mlm_data$people), 1, mlm_data$distantTies4)
+mlm_data$distantTies4<-ifelse(grepl(",1,",mlm_data$people),1, mlm_data$distantTies4)
+mlm_data$distantTies4<-ifelse(grepl(",1$",mlm_data$people),1, mlm_data$distantTies4)
+mlm_data$distantTies4<-ifelse(grepl("^1$",mlm_data$people),1, mlm_data$distantTies4)
+mlm_data$distantTies2<-0
+mlm_data$distantTies2<-ifelse(grepl("^2,",mlm_data$people), 1, mlm_data$distantTies2)
+mlm_data$distantTies2<-ifelse(grepl(",2,",mlm_data$people),1, mlm_data$distantTies2)
+mlm_data$distantTies2<-ifelse(grepl(",2$",mlm_data$people),1, mlm_data$distantTies2)
+mlm_data$distantTies2<-ifelse(grepl("^2$",mlm_data$people),1,mlm_data$distantTies2)
+mlm_data$distantTies3<-0
+mlm_data$distantTies3<-ifelse(grepl("^7,",mlm_data$people), 1, mlm_data$distantTies3)
+mlm_data$distantTies3<-ifelse(grepl(",7,",mlm_data$people),1, mlm_data$distantTies3)
+mlm_data$distantTies3<-ifelse(grepl(",7$",mlm_data$people),1, mlm_data$distantTies3)
+mlm_data$distantTies3<-ifelse(grepl("^7$",mlm_data$people),1, mlm_data$distantTies3)
+
+mlm_data$distantTies<-ifelse(mlm_data$distantTies4==1 | mlm_data$distantTies2==1 | mlm_data$distantTies3==1, 1, 0)
+
+mlm_data$distantTies<-ifelse(is.na(mlm_data$people),as.numeric(NA), mlm_data$distantTies)
+
+i<-mlm_data %>%
+  select(distantTies, id, people)
+
+### Family vs Alone
+
+mlm_data$familyTies4<-0
+mlm_data$familyTies4<-ifelse(grepl("^3,",mlm_data$people), 1, mlm_data$familyTies4)
+mlm_data$familyTies4<-ifelse(grepl(",3,",mlm_data$people),1, mlm_data$familyTies4)
+mlm_data$familyTies4<-ifelse(grepl(",3$",mlm_data$people),1, mlm_data$familyTies4)
+mlm_data$familyTies4<-ifelse(grepl("^3$",mlm_data$people),1, mlm_data$familyTies4)
+
+mlm_data$familyTies<-mlm_data$familyTies4
+
+mlm_data$familyTies<-ifelse(is.na(mlm_data$people),as.numeric(NA), mlm_data$familyTies)
+
+
+i<-mlm_data %>%
+  select(familyTies, id, people)
+
+### Social Locations 
+
+mlm_data$home_social4<-0
+mlm_data$home_social4<-ifelse(grepl("^1,",mlm_data$place), 1, mlm_data$home_social4)
+mlm_data$home_social4<-ifelse(grepl(",1,",mlm_data$place),1, mlm_data$home_social4)
+mlm_data$home_social4<-ifelse(grepl(",1$",mlm_data$place),1, mlm_data$home_social4)
+mlm_data$home_social4<-ifelse(grepl("^1$",mlm_data$place),1, mlm_data$home_social4)
+
+mlm_data$home_social2<-0
+mlm_data$home_social2<-ifelse(grepl("^2,",mlm_data$place), 1, mlm_data$home_social2)
+mlm_data$home_social2<-ifelse(grepl(",2,",mlm_data$place),1, mlm_data$home_social2)
+mlm_data$home_social2<-ifelse(grepl(",2$",mlm_data$place),1, mlm_data$home_social2)
+mlm_data$home_social2<-ifelse(grepl("^2$",mlm_data$place),1,mlm_data$home_social2)
+mlm_data$home_social3<-0
+mlm_data$home_social3<-ifelse(grepl("^3,",mlm_data$place), 1, mlm_data$home_social3)
+mlm_data$home_social3<-ifelse(grepl(",3,",mlm_data$place),1, mlm_data$home_social3)
+mlm_data$home_social3<-ifelse(grepl(",3$",mlm_data$place),1, mlm_data$home_social3)
+mlm_data$home_social3<-ifelse(grepl("^3$",mlm_data$place),1, mlm_data$home_social3)
+
+mlm_data$home_social5<-0
+mlm_data$home_social5<-ifelse(grepl("^5,",mlm_data$place), 1, mlm_data$home_social5)
+mlm_data$home_social5<-ifelse(grepl(",5,",mlm_data$place),1, mlm_data$home_social5)
+mlm_data$home_social5<-ifelse(grepl(",5$",mlm_data$place),1, mlm_data$home_social5)
+mlm_data$home_social5<-ifelse(grepl("^5$",mlm_data$place),1, mlm_data$home_social5)
+
+mlm_data$home_social<-ifelse(mlm_data$home_social4==1 | mlm_data$home_social2==1 | mlm_data$home_social3==1 |mlm_data$home_social5==1, 1, 0)
+
+mlm_data$home_social<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_social)
+
+i<-mlm_data %>%
+  select(home_social, id, place)
+
+inspect<-mlm_data %>%
+  select(home_social, place, id)
+
+mlm_data$home_social<-factor(mlm_data$home_social)
+mlm_data$home_social<-relevel(mlm_data$home_social, ref="0")
+levels(mlm_data$home_social)
+
+mlm_data$home_nature<-ifelse(grepl("13", mlm_data$place), 1, 0)
+mlm_data$home_nature<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_nature)
+
+i<-mlm_data %>%
+  select(home_nature, place, id )
+
+mlm_data$home_nature<-factor(mlm_data$home_nature)
+mlm_data$home_nature<-relevel(mlm_data$home_nature, ref="0")
+levels(mlm_data$home_nature)
+
+mlm_data$home_work<-ifelse(grepl("11", mlm_data$place), 1, 0)
+
+mlm_data$home_work<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_work)
+
+mlm_data$home_work<-factor(mlm_data$home_work)
+mlm_data$home_work<-relevel(mlm_data$home_work, ref="0")
+levels(mlm_data$home_work)
+
+mlm_data$home_transit<-ifelse(grepl("12", mlm_data$place), 1, 0)
+mlm_data$home_transit<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_transit)
+
+
+mlm_data$home_transit<-factor(mlm_data$home_transit)
+mlm_data$home_transit<-relevel(mlm_data$home_transit, ref="0")
+levels(mlm_data$home_transit)
+
+mlm_data$home4<-0
+mlm_data$home4<-ifelse(grepl("^7,",mlm_data$place), 1, mlm_data$home4)
+mlm_data$home4<-ifelse(grepl(",7,",mlm_data$place),1, mlm_data$home4)
+mlm_data$home4<-ifelse(grepl(",7$",mlm_data$place),1, mlm_data$home4)
+mlm_data$home4<-ifelse(grepl("^7$",mlm_data$place),1, mlm_data$home4)
+
+mlm_data$home<-mlm_data$home4
+mlm_data$home<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home)
+
+
+i<-mlm_data %>%
+  select(home, id, place)
+
+mlm_data$home<-factor(mlm_data$home)
+mlm_data$home<-relevel(mlm_data$home, ref="0")
+
+### Alone 
+
+mlm_data$alone4<-0
+mlm_data$alone4<-ifelse(grepl("^8,",mlm_data$people), 1, mlm_data$alone4)
+mlm_data$alone4<-ifelse(grepl(",8,",mlm_data$people),1, mlm_data$alone4)
+mlm_data$alone4<-ifelse(grepl(",8$",mlm_data$people),1, mlm_data$alone4)
+mlm_data$alone4<-ifelse(grepl("^8$",mlm_data$people),1, mlm_data$alone4)
+
+mlm_data$alone<-mlm_data$alone4
+mlm_data$alone<-ifelse(is.na(mlm_data$people),as.numeric(NA), mlm_data$alone)
+
+i<-mlm_data %>%
+  select(alone, id, place)
+
+#### CODING PHYSICAL CONTEXT
+
+### 1 (Bar, party); 2 (Cafe, restaurant); 3 (Friend’s house); 4 (University campus); 5 (Fraternity, sorority house); 6 (Gym); 7 (Home); 8 (Library); 9 (Religious facility); 10 (Store, mall); 11 (Work place (not your home office)); 12 (Vehicle); 13 (Outdoors, park, or in nature); 14 (None of the above, other);
+
+### Study Locations Vs Other Locations 
+
+mlm_data$home_study4<-0
+mlm_data$home_study4<-ifelse(grepl("^4,",mlm_data$place), 1, mlm_data$home_study4)
+mlm_data$home_study4<-ifelse(grepl(",4,",mlm_data$place),1, mlm_data$home_study4)
+mlm_data$home_study4<-ifelse(grepl(",4$",mlm_data$place),1, mlm_data$home_study4)
+mlm_data$home_study4<-ifelse(grepl("^4$",mlm_data$place),1, mlm_data$home_study4)
+
+mlm_data$home_study2<-0
+mlm_data$home_study2<-ifelse(grepl("^8,",mlm_data$place), 1, mlm_data$home_study2)
+mlm_data$home_study2<-ifelse(grepl(",8,",mlm_data$place),1, mlm_data$home_study2)
+mlm_data$home_study2<-ifelse(grepl(",8$",mlm_data$place),1, mlm_data$home_study2)
+mlm_data$home_study2<-ifelse(grepl("^8$",mlm_data$place),1,mlm_data$home_study2)
+
+mlm_data$home_study<-ifelse(mlm_data$home_study4==1 | mlm_data$home_study2==1, 1, 0)
+
+mlm_data$home_study<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_study)
+
+inspect<-mlm_data %>%
+  select(id, place, home_study4, home_study2, home_study)
+
+### Gym Locations Vs Other Locations
+
+mlm_data$gym4<-0
+mlm_data$gym4<-ifelse(grepl("^6,",mlm_data$place), 1, mlm_data$gym4)
+mlm_data$gym4<-ifelse(grepl(",6,",mlm_data$place),1, mlm_data$gym4)
+mlm_data$gym4<-ifelse(grepl(",6$",mlm_data$place),1, mlm_data$gym4)
+mlm_data$gym4<-ifelse(grepl("^6$",mlm_data$place),1, mlm_data$gym4)
+
+mlm_data$home_gym<-mlm_data$gym4
+mlm_data$home_gym<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_gym)
+
+### Religious Locations Vs Other Locations
+
+mlm_data$religion4<-0
+mlm_data$religion4<-ifelse(grepl("^9,",mlm_data$place), 1, mlm_data$religion4)
+mlm_data$religion4<-ifelse(grepl(",9,",mlm_data$place),1, mlm_data$religion4)
+mlm_data$religion4<-ifelse(grepl(",9$",mlm_data$place),1, mlm_data$religion4)
+mlm_data$religion4<-ifelse(grepl("^9$",mlm_data$place),1, mlm_data$religion4)
+
+mlm_data$home_religion<-mlm_data$religion4
+mlm_data$home_religion<-ifelse(is.na(mlm_data$place),as.numeric(NA), mlm_data$home_religion)
+```
+
+
+### Data Wrangling Procedures
+
+```{r}
+count_na <- function(x) sum(!is.na(x)) 
+
+### Filtering to keep only those participants with at-least 33% of the total required EMAs.
+## Total Number of Possible EMAs = 196
+## Minimum Number of EMas required to obtain credit for the assignment = 56
+## Past research has retained participants with atleast 33% of the minimum number of required EMAs
+### 33% of 56 = 18.48 = 19
+
+count.ppt_preFilter<-length(unique(mlm_data$id))
+ppt_preFilter<-unique(mlm_data$id)
+
+count.obs_preFilter<-length(mlm_data$id)
+
+mlm_data<-mlm_data %>%
+  dplyr::mutate(wb=if_else(!is.na(wellbeing), 1, 999999999),
+                wb_sm=if_else(!is.na(activity), wb, 999999999),
+                wb_sm_naCheck=na_if(wb_sm, 999999999)) %>%
+  dplyr::select(-c(wb, wb_sm)) %>%
+  dplyr::mutate(sum=sum(wb_sm_naCheck, na.rm=TRUE)) %>%
+  dplyr::filter(sum>19)
+
+count.ppt_postFilter<-length(unique(mlm_data$id))
+ppt_postFilter<-unique(mlm_data$id)
+
+count.obs_postFilter<-length(mlm_data$id)
+nFilteredPPt<-count.ppt_preFilter-count.ppt_postFilter ### 49 participants were filtered
+nFilteredObs<-count.obs_preFilter-count.obs_postFilter ### Across 317 participants, 577 observations were filtered
+
+ppt_idsFiltered<-dplyr::setdiff(ppt_preFilter, ppt_postFilter)
+
+```
+
+```{r}
+#### Computing Lagged Duration
+### Computing Pertinent Duration Measures
+mlm_data <- mlm_data[order(mlm_data$id, mlm_data$StartDate),]
+mlm_data <- mlm_data %>%
+  ungroup() %>%
+  dplyr::group_by(id) %>%
+  dplyr::mutate(time_diff = round(as.numeric(StartDate-lag(StartDate), units = 'hours'))) %>% ### compute duration since last EMA was completed
+  dplyr::mutate(lagDur=if_else(!is.na(wellbeing), time_diff, 999999999)) %>% ### impute missing values for duration since last response if wellbeing scores are missing
+  dplyr::mutate(lagDur2=na_if(lagDur, "999999999")) %>% ## replace custom missing values with NA values
+  dplyr::mutate(nAct=count.fields(textConnection(activity), sep = ",")) 
+
+inspect1<-mlm_data %>%
+  select(id, StartDate, activity, wellbeing, nAct, time_diff,lagDur, lagDur2, 
+         angry_r, worried_r, happy, sad_r, stressed_r, lonely_r)
+```
+
+
+### Step 4: Add in personality and trait wellbeing metrics.
+
+```{r}
+personality_merge<-personality %>%
+  dplyr::select(bfi_a, bfi_c, bfi_e, bfi_n, bfi_o, id) %>%
+  dplyr::rename(Agreeableness=bfi_a,
+                Extraversion=bfi_e,
+                Neuroticism=bfi_n,
+                Openness=bfi_o,
+                Conscientiousness=bfi_c) %>%
+  distinct()
+
+mlm_data<-mlm_data %>%
+  dplyr::left_join(personality_merge, by="id")
+
+
+ps_select<-presurvey %>%
+  dplyr::select(id, contains("swls_sum"), contains("awb"), contains("uls_mean"), contains("narqs_adm"), contains("narqs_riv"), contains("media"))
+
+mlm_data<-mlm_data %>%
+  dplyr::left_join(ps_select, by="id") %>%
+  dplyr::rename(AngryTrait=awb_1_t1,
+                WorriedTrait=awb_2_t1,
+                HappyTrait=awb_3_t1,
+                SadTrait=awb_4_t1,
+                EnthuTrait=awb_5_t1,
+                RelaxedTrait=awb_6_t1)
+  
+mlm_data<-mlm_data %>%
+  dplyr::mutate(
+    angryTrait_r=case_when(
+    AngryTrait=="1" & !is.na(AngryTrait) ~ 5, 
+    AngryTrait=="2"  & !is.na(AngryTrait) ~ 4, 
+    AngryTrait=="3" & !is.na(AngryTrait) ~ 3, 
+    AngryTrait=="4" & !is.na(AngryTrait) ~ 2,
+    AngryTrait=="5" & !is.na(AngryTrait) ~ 1),
+  worriedTrait_r=case_when(
+    WorriedTrait=="1" & !is.na(WorriedTrait) ~ 5, 
+    WorriedTrait=="2" & !is.na(WorriedTrait) ~ 4, 
+    WorriedTrait=="3" & !is.na(WorriedTrait) ~ 3, 
+    WorriedTrait=="4" & !is.na(WorriedTrait) ~ 2,
+    WorriedTrait=="5" & !is.na(WorriedTrait) ~ 1),
+  sadTrait_r=case_when(
+    SadTrait=="1" & !is.na(SadTrait) ~ 5, 
+    SadTrait=="2" & !is.na(SadTrait) ~ 4, 
+    SadTrait=="3" & !is.na(SadTrait) ~ 3, 
+    SadTrait=="4" & !is.na(SadTrait) ~ 2,
+    SadTrait=="5" & !is.na(SadTrait) ~ 1))
+
+
+select_vars<-mlm_data[,c("angryTrait_r", "worriedTrait_r", "HappyTrait", "sadTrait_r", "EnthuTrait", "RelaxedTrait")]
+mlm_data$trait_wellbeing<-rowMeans(select_vars, na.rm = TRUE)
+
+mlm_data$negative_affect_trait <- apply(mlm_data[c("AngryTrait", "WorriedTrait", "SadTrait")], 1, function(x) {mean(x, na.rm = TRUE)})
+mlm_data$affect_balance_trait <- mlm_data$HappyTrait - mlm_data$negative_affect_trait
+```
+
+### Step 5: Filter by Age and Sex
+
+```{r}
+nObsSexFilter<-mlm_data %>%
+  filter(demog_sex==3) %>%
+  select(id, demog_sex)
+
+nPPtsSexFilter<-nObsSexFilter %>%
+  select(id) %>%
+  distinct()
+
+nObsAgeFilter<-mlm_data %>%
+  filter(demog_age>=25) %>%
+  select(id, demog_age)
+
+nPPtsAgeFilter<-nObsAgeFilter %>%
+  select(id) %>%
+  distinct()
+
+count.obs_preAgeSexFilter<-length(mlm_data$id)
+count.ppt_preAgeSexFilter<-length(unique(mlm_data$id))
+ppt_preAgeSexFilter<-unique(mlm_data$id)
+
+min(mlm_data$demog_age) ### Minimum age is 17 because some folks turned 18 after completing demographics but before EMAs started so they are included in the analyses. 
+
+mlm_data<-mlm_data %>%
+  dplyr::filter(demog_age<=25) %>%
+  dplyr::filter(demog_sex != 3)
+
+count.obs_postAgeSexFilter<-length(mlm_data$id)
+count.ppt_postAgeSexFilter<-length(unique(mlm_data$id))
+ppt_postAgeSexFilter<-unique(mlm_data$id)
+nPptsFilteredAgeSex<-count.ppt_preAgeSexFilter-count.ppt_postAgeSexFilter
+nObsFilteredAgeSex<-count.obs_preAgeSexFilter-count.obs_postAgeSexFilter
+
+
+mlm_data_fall<-mlm_data
+
+mlm_data_fall$sample<-"Fall"
+mlm_data_spring$sample<-"Spring"
+```
+
+```{r}
+mlm_data_spring$swls_1_t1<-NULL
+mlm_data_spring$swls_2_t1<-NULL
+mlm_data_spring$swls_3_t1<-NULL
+mlm_data_spring$swls_4_t1<-NULL
+mlm_data_spring$swls_5_t1<-NULL
+mlm_data_spring$uls_1_t1<-NULL
+mlm_data_spring$uls_2_t1<-NULL
+mlm_data_spring$uls_3_t1<-NULL
+mlm_data_spring$uls_4_t1<-NULL
+mlm_data_spring$uls_5_t1<-NULL
+mlm_data_spring$uls_6_t1<-NULL
+mlm_data_spring$uls_7_t1<-NULL
+mlm_data_spring$awb_7_t1<-NULL
+mlm_data_spring$uls_8_t1<-NULL
+mlm_data_spring$uls_9_t1<-NULL
+mlm_data_fall$narqs_adm<-NULL
+mlm_data_fall$narqs_riv<-NULL
+```
+
+```{r}
+mlm_data<-rbind(mlm_data_fall, mlm_data_spring)
+fall<-colnames(mlm_data_fall)
+spring<-colnames(mlm_data_spring)
+diff<-setdiff(spring, fall)
+
+mlm_data_descr<-mlm_data %>%
+  mutate(across(.cols =where(is.factor), ~as.numeric(as.character(.))))
+
+describe<-describe(mlm_data)
+write.csv(describe, "describe.csv")
+
+plot_data<-mlm_data %>%
+  select(id, sample, StartDateConvert, home_social, home_nature, home_gym, home_religion, home_work, home_transit, home_study,familyTies, distantTies, closeTies, alone, home, MediaUse, socialmedia)
+
+plot_data$home_social<-as.numeric(as.character(plot_data$home_social))
+plot_data$home_nature<-as.numeric(as.character(plot_data$home_nature))
+plot_data$home_work<-as.numeric(as.character(plot_data$home_work))
+plot_data$home_transit<-as.numeric(as.character(plot_data$home_transit))
+plot_data$MediaUse<-as.numeric(as.character(plot_data$MediaUse))
+plot_data$home<-as.numeric(as.character(plot_data$home))
+
+plot1_data<-plot_data %>%
+  pivot_longer(
+    cols = home_social:home,
+    names_to = "Context",
+    values_to="ContextVals"
+  ) %>%
+  dplyr::filter(
+    ContextVals==1
+  ) %>%
+  group_by(Context, sample) %>%
+  transmute(
+    meanUse=mean(MediaUse, na.rm=TRUE)*100,
+    meanDuration=mean(socialmedia, na.rm=TRUE),
+    sdUse=sd(MediaUse, na.rm=TRUE)*100,
+    sdDuration=sd(socialmedia, na.rm=TRUE)
+  ) %>%
+  dplyr::distinct() 
+
+context_plot_data<-plot_data %>%
+  pivot_longer(
+    cols = home_social:home,
+    names_to = "Context",
+    values_to="ContextVals"
+  ) %>%
+    dplyr::filter(
+    ContextVals==1
+  )  %>% group_by(Context, sample) %>%
+  transmute(
+    sample, contextValsSum=sum(ContextVals, na.rm=TRUE)
+  ) %>%
+  dplyr::distinct()  %>%
+  ungroup %>%
+  group_by(sample) %>%
+  mutate(
+    contextValsProp=(contextValsSum/sum(contextValsSum))*100
+  )
+
+context_plot_data$sample[context_plot_data$sample == 'Fall'] <- 'Exploratory'
+context_plot_data$sample[context_plot_data$sample == 'Spring'] <- 'Confirmatory'
+
+
+context_plot_data$sampleFactor<-as.factor(context_plot_data$sample)
+
+context_plot_data$Context[context_plot_data$Context == 'alone'] <- 'Alone'
+context_plot_data$Context[context_plot_data$Context == 'closeTies'] <- 'Close Ties'
+context_plot_data$Context[context_plot_data$Context == 'distantTies'] <- 'Distant Ties'
+context_plot_data$Context[context_plot_data$Context == 'familyTies'] <- 'Family Ties'
+context_plot_data$Context[context_plot_data$Context == 'home'] <- 'Home'
+context_plot_data$Context[context_plot_data$Context == 'home_gym'] <- 'Gym'
+context_plot_data$Context[context_plot_data$Context == 'home_nature'] <- 'Nature'
+context_plot_data$Context[context_plot_data$Context == 'home_religion'] <- 'Religion'
+context_plot_data$Context[context_plot_data$Context == 'home_social'] <- 'Social Places'
+context_plot_data$Context[context_plot_data$Context == 'home_study'] <- 'Study Places'
+context_plot_data$Context[context_plot_data$Context == 'home_transit'] <- 'Transit'
+context_plot_data$Context[context_plot_data$Context == 'home_work'] <- 'Workplaces'
+
+
+p1<-ggplot(data=context_plot_data, aes(x=reorder(Context, +contextValsProp), y=contextValsProp, group=sampleFactor, color=sampleFactor)) +  geom_point(size=8)+theme_apa() + xlab("Context") + ylab("Percent of all Observations") + theme(
+    axis.text.x = element_text(size=20, angle=90, vjust=0.5, hjust=1), 
+    axis.text.y=element_text(size=25),
+    axis.title.y=element_text(size=25), 
+    axis.title.x=element_text(size=25),
+    legend.text=element_text(size=25)
+  )
+ggsave("ContextPercentages.png", width=10, height=10) 
+
+plot1_data$Context[plot1_data$Context == 'alone'] <- 'Alone'
+plot1_data$Context[plot1_data$Context == 'closeTies'] <- 'Close Ties'
+plot1_data$Context[plot1_data$Context == 'distantTies'] <- 'Distant Ties'
+plot1_data$Context[plot1_data$Context == 'familyTies'] <- 'Family Ties'
+plot1_data$Context[plot1_data$Context == 'home'] <- 'Home'
+plot1_data$Context[plot1_data$Context == 'home_gym'] <- 'Gym'
+plot1_data$Context[plot1_data$Context == 'home_nature'] <- 'Nature'
+plot1_data$Context[plot1_data$Context == 'home_religion'] <- 'Religion'
+plot1_data$Context[plot1_data$Context == 'home_social'] <- 'Social Places'
+plot1_data$Context[plot1_data$Context == 'home_study'] <- 'Study Places'
+plot1_data$Context[plot1_data$Context == 'home_transit'] <- 'Transit'
+plot1_data$Context[plot1_data$Context == 'home_work'] <- 'Workplaces'
+
+plot1_data$Context1<-NA
+plot1_data$Context1[plot1_data$Context == 'Alone'] <- 'Social'
+plot1_data$Context1[plot1_data$Context == 'Close Ties'] <- 'Social'
+plot1_data$Context1[plot1_data$Context == 'Distant Ties'] <- 'Social'
+plot1_data$Context1[plot1_data$Context == 'Family Ties'] <- 'Social'
+plot1_data$Context1[plot1_data$Context == 'Home'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Gym'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Nature'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Religion'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Social Places'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Study Places'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Transit'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Workplaces'] <- 'Physical'
+
+plot1_data_x<- plot1_data %>%
+  dplyr::filter(Context1=='Social')
+
+plot1_data_x$sample[plot1_data_x$sample == 'Fall'] <- 'Exploratory'
+plot1_data_x$sample[plot1_data_x$sample == 'Spring'] <- 'Confirmatory'
+
+plot1_data_x$sampleFactor<-factor(plot1_data_x$sample)
+
+p2<-ggplot(data=plot1_data_x, aes(x=reorder(Context, +meanUse), y=meanUse, group=sampleFactor, color=sampleFactor)) +  geom_point(size=8)+theme_apa()+theme(
+    axis.text.x = element_text(size=40), 
+    axis.text.y=element_text(size=40),
+    axis.title.y=element_text(size=41), 
+    axis.title.x=element_text(size=41),
+    legend.text=element_text(size=41)
+  )+
+  xlab("") +
+  ylab("Mean Frequency of Social Media Use (%)") + coord_flip() + scale_y_continuous(limits=c(0,100), breaks=seq(0, 100, 20))
+
+ggsave("Social Media Frequency by Context Social - Sample Specific.png", width=18, height=15) 
+
+plot1_data_y<- plot1_data %>%
+  dplyr::filter(Context1=='Physical')
+
+plot1_data_y$sample[plot1_data_y$sample == 'Fall'] <- 'Exploratory'
+plot1_data_y$sample[plot1_data_y$sample == 'Spring'] <- 'Confirmatory'
+
+plot1_data_y$sampleFactor<-factor(plot1_data_y$sample)
+
+p2<-ggplot(data=plot1_data_y, aes(x=reorder(Context, +meanUse), y=meanUse, group=sampleFactor, color=sampleFactor)) +  geom_point(size=8)+theme_apa()+theme(
+    axis.text.x = element_text(size=40), 
+    axis.text.y=element_text(size=40),
+    axis.title.y=element_text(size=41), 
+    axis.title.x=element_text(size=41),
+    legend.text=element_text(size=41)
+  )+
+  xlab("") +
+  ylab("Mean Frequency of Social Media Use (%)") + coord_flip() + scale_y_continuous(limits=c(0,100), breaks=seq(0, 100, 20))
+
+ggsave("Social Media Frequency by Context Physical - Sample Specific.png", width=18, height=15) 
+
+plot1_data<-plot_data %>%
+  pivot_longer(
+    cols = home_social:home,
+    names_to = "Context",
+    values_to="ContextVals"
+  ) %>%
+  dplyr::filter(
+    ContextVals==1
+  ) %>%
+  group_by(Context, sample) %>%
+  transmute(
+    meanUse=mean(MediaUse, na.rm=TRUE)*100,
+    meanDuration=mean(socialmedia, na.rm=TRUE),
+    sdUse=sd(MediaUse, na.rm=TRUE)*100,
+    sdDuration=sd(socialmedia, na.rm=TRUE)
+  ) %>%
+  dplyr::distinct() 
+
+plot1_data$Context[plot1_data$Context == 'alone'] <- 'Alone'
+plot1_data$Context[plot1_data$Context == 'closeTies'] <- 'Close Ties'
+plot1_data$Context[plot1_data$Context == 'distantTies'] <- 'Distant Ties'
+plot1_data$Context[plot1_data$Context == 'familyTies'] <- 'Family Ties'
+plot1_data$Context[plot1_data$Context == 'home'] <- 'Home'
+plot1_data$Context[plot1_data$Context == 'home_gym'] <- 'Gym'
+plot1_data$Context[plot1_data$Context == 'home_nature'] <- 'Nature'
+plot1_data$Context[plot1_data$Context == 'home_religion'] <- 'Religion'
+plot1_data$Context[plot1_data$Context == 'home_social'] <- 'Social Places'
+plot1_data$Context[plot1_data$Context == 'home_study'] <- 'Study Places'
+plot1_data$Context[plot1_data$Context == 'home_transit'] <- 'Transit'
+plot1_data$Context[plot1_data$Context == 'home_work'] <- 'Workplaces'
+
+
+plot1_data$Context1<-NA
+plot1_data$Context1[plot1_data$Context == 'Alone'] <- 'Social'
+plot1_data$Context1[plot1_data$Context == 'Close Ties'] <- 'Social'
+plot1_data$Context1[plot1_data$Context == 'Distant Ties'] <- 'Social'
+plot1_data$Context1[plot1_data$Context == 'Family Ties'] <- 'Social'
+plot1_data$Context1[plot1_data$Context == 'Home'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Gym'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Nature'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Religion'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Social Places'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Study Places'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Transit'] <- 'Physical'
+plot1_data$Context1[plot1_data$Context == 'Workplaces'] <- 'Physical'
+
+library(hrbrthemes)
+
+plot1_data_x<- plot1_data %>%
+  dplyr::filter(Context1=='Social')
+
+plot1_data_x$sample[plot1_data_x$sample == 'Fall'] <- 'Exploratory'
+plot1_data_x$sample[plot1_data_x$sample == 'Spring'] <- 'Confirmatory'
+
+plot1_data_x$sampleFactor<-factor(plot1_data_x$sample)
+
+p3<-ggplot(data=plot1_data_x, aes(x=reorder(Context, +meanDuration), y=meanDuration, group=sampleFactor, color=sampleFactor)) +  geom_point(size=8)+theme_apa()+theme(
+    axis.text.x = element_text(size=40), 
+    axis.text.y=element_text(size=40),
+    axis.title.y=element_text(size=41), 
+    axis.title.x=element_text(size=41),
+    legend.text=element_text(size=41))+
+  xlab("") +
+  ylab("Mean Duration of Social Media Use (Minutes)") + coord_flip() + scale_y_continuous(limits=c(0,4), labels=c("<1","1-15",  "16-30", "30-45",  "46-60")) 
+
+ggsave("Social Media Use Duration by Context Social - Sample Specific.png", width=18, height=15) 
+
+plot1_data_y<- plot1_data %>%
+  dplyr::filter(Context1=='Physical')
+
+plot1_data_y$sample[plot1_data_y$sample == 'Fall'] <- 'Exploratory'
+plot1_data_y$sample[plot1_data_y$sample == 'Spring'] <- 'Confirmatory'
+
+plot1_data_y$sampleFactor<-factor(plot1_data_y$sample)
+
+p4<-ggplot(data=plot1_data_y, aes(x=reorder(Context, +meanDuration), y=meanDuration, group=sampleFactor, color=sampleFactor)) +  geom_point(size=8)+theme_apa()+theme(
+    axis.text.x = element_text(size=40), 
+    axis.text.y=element_text(size=40),
+    axis.title.y=element_text(size=41), 
+    axis.title.x=element_text(size=41),
+    legend.text=element_text(size=41))+
+  xlab("") +
+  ylab("Mean Duration of Social Media Use (Minutes)") + coord_flip() + scale_y_continuous(limits=c(0,4), labels=c("<1","1-15",  "16-30", "30-45",  "46-60"))
+
+ggsave("Social Media Use Duration by Context Physical - Sample Specific.png", width=18, height=15) 
+```
